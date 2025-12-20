@@ -1,0 +1,37 @@
+annotated-types==0.7.0
+anyio==4.12.0
+Bottleneck @ file:///home/task_176193794808509/conda-bld/bottleneck_1761937988290/work
+brotlicffi @ file:///home/task_176496125431831/conda-bld/brotlicffi_1764961387175/work
+certifi @ file:///home/task_176313475725006/conda-bld/certifi_1763135328462/work/certifi
+cffi @ file:///home/task_176183215827778/conda-bld/cffi_1761832774246/work
+charset-normalizer @ file:///home/task_176174482135433/conda-bld/charset-normalizer_1761744871447/work
+exceptiongroup @ file:///home/task_176156033398806/conda-bld/exceptiongroup_1761560346388/work
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna @ file:///home/task_176191177045451/conda-bld/idna_1761911980742/work
+iniconfig @ file:///croot/iniconfig_1752653729464/work
+mkl-service==2.5.2
+mkl_fft @ file:///home/task_176159252575002/conda-bld/mkl_fft_1761592901585/work
+mkl_random @ file:///home/task_176159293813909/conda-bld/mkl_random_1761592952512/work
+numexpr @ file:///home/task_176216559424661/conda-bld/numexpr_1762165604917/work
+numpy @ file:///home/task_176157872663408/conda-bld/numpy_and_numpy_base_1761579342634/work/dist/numpy-2.2.5-cp310-cp310-linux_x86_64.whl#sha256=fb5b85b589f86e6404be6a37347b98be70b32c4ae837bb26e1180e9f9a7fb718
+ollama==0.6.1
+packaging @ file:///home/task_176104877067765/conda-bld/packaging_1761049113113/work
+pandas @ file:///home/task_176233228161209/conda-bld/pandas_1762332325727/work/dist/pandas-2.3.3-cp310-cp310-linux_x86_64.whl#sha256=cd4241f338dbf9922b2bc5a62ff6267574e607e9e9ea8b5efbba07b037c96f8f
+pluggy @ file:///croot/pluggy_1733169602837/work
+pycparser @ file:///home/task_175749556993857/conda-bld/pycparser_1757496041120/work
+pydantic==2.12.5
+pydantic_core==2.41.5
+Pygments @ file:///home/task_176243133176773/conda-bld/pygments_1762431407223/work
+PySocks @ file:///home/task_176175228103966/conda-bld/pysocks_1761753009555/work
+pytest @ file:///home/task_175812502354629/conda-bld/pytest_1758125039763/work
+python-dateutil @ file:///croot/python-dateutil_1716495738603/work
+pytz @ file:///croot/pytz_1752135852232/work
+requests @ file:///home/task_176235919024464/conda-bld/requests_1762359590301/work
+six @ file:///croot/six_1744271502820/work
+tomli @ file:///croot/tomli_1753774587605/work
+typing-inspection==0.4.2
+typing_extensions @ file:///croot/typing_extensions_1756280817316/work
+tzdata @ file:///croot/python-tzdata_1746123641790/work
+urllib3 @ file:///home/task_176539906038445/conda-bld/urllib3_1765399193651/work

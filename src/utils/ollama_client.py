@@ -54,8 +54,22 @@ def get_ollama_response(
 
         response_data = response.json()
         
-        # Ollama returns the generated text in the "response" key
-        return response_data.get("response", "").strip()
+        raw_text = response_data.get("response", "").strip()
+
+        # --- NEW CLEANING LOGIC ---
+        # Remove markdown code fences if present
+        if raw_text.startswith("```"):
+            lines = raw_text.splitlines()
+            # Remove first line if it's a backtick fence (e.g., ```spss)
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            # Remove last line if it's a backtick fence
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            raw_text = "\n".join(lines).strip()
+        # --------------------------
+
+        return raw_text
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Ollama API Request Failed: {e}")
