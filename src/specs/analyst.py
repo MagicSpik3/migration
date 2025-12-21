@@ -1,37 +1,42 @@
 import os
 from src.utils.ollama_client import get_ollama_response
 
-ANALYST_PROMPT = """
-You are a Technical Business Analyst.
-Your goal is to Reverse Engineer legacy SPSS syntax into a modern **Technical Requirements Specification**.
 
-### SOURCE SPSS CODE:
+ANALYST_PROMPT = """
+You are a Technical Business Analyst migrating a complex Legacy System.
+Your goal is to Reverse Engineer **Logic** and **Control Flow** from SPSS code.
+
+### TARGET AUDIENCE:
+A Senior R Developer who CANNOT run this original code. Your Spec is the ONLY truth.
+
+### ANALYSIS INSTRUCTIONS:
+
+1. **Identify the "Driver":**
+   * Does this script read from Excel/Text to set variables? 
+   * Does it use `DEFINE !...` (Macros) to change behavior based on inputs?
+   * *Requirement:* If you see Macros, describe them as "Configurable Parameters", not code.
+
+2. **Handle Proprietary Syntax:**
+   * If you see commands that look like custom extensions or unknown functions, DO NOT GUESS.
+   * Mark them in the spec as: `**[RISK] Unknown Syntax: <command>**`
+   * Try to infer intent from comments.
+
+3. **Data Dictionary:**
+   * List every variable created.
+   * Note the Directionality of time (Start -> End).
+
+4. **Logical Complexity:**
+   * If the script relies on a global variable set elsewhere, explicitly state: "Requires Global Parameter X".
+
+### SOURCE CODE:
 {spss_code}
 
-### INSTRUCTIONS:
-Analyze the code and produce a Markdown specification.
-Focus on **Business Logic** and **Data Transformations**, ignoring syntax-specific artifacts (like FORMATS or EXECUTE).
-
-### OUTPUT FORMAT (Markdown):
-
-# Specification: [Filename]
-
-## 1. Data Dictionary
-| Variable | Type | Description/Format |
-| :--- | :--- | :--- |
-| dor | String | Date of Registration (Format: YYYYMMDD) |
-
-## 2. Transformation Logic
-*Describe every variable created or modified.*
-* **Example:** `delay_days` = Calculate days between `dor` and `dod`.
-
-## 3. Filtering & Business Rules
-*List any records that are excluded or flagged.*
-* **Rule 1:** Exclude records where...
-
-## 4. Key Assumptions / Ambiguities
-*Note any logic that seems specific to SPSS idiosyncrasies (e.g. DATEDIF handling).*
+### OUTPUT FORMAT:
+... (Same Markdown structure) ...
 """
+
+
+
 
 def generate_spec(sps_path, output_dir):
     filename = os.path.basename(sps_path).replace('.sps', '.md')
