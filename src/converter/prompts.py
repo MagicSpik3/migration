@@ -45,23 +45,31 @@ LOGIC_TRANSLATION_TEMPLATE = """
 {system_prompt}
 
 TASK:
-Convert the provided R function logic into valid SPSS Syntax or a !MACRO.
+Convert the provided R function logic into valid SPSS Syntax.
 
-CRITICAL TRANSLATION RULES:
-1. **Date Parsing:**
-   - If R uses `as.Date(x, format="%Y%m%d")` (e.g. "20230101"), use SPSS: `COMPUTE x_new = NUMBER(x, YMD8).`
-   - NEVER use `DATE.MDY` with `SUBSTR` for this. It causes type errors.
-   - Always setting the format: `FORMATS x_new (DATE11).`
+CRITICAL SYNTAX RULES (DO NOT IGNORE):
 
-2. **Dplyr Mappings:**
-   - R: group_by() + summarise()  -> SPSS: AGGREGATE /OUTFILE=* /BREAK=vars ...
-   - R: filter(condition)         -> SPSS: SELECT IF (condition).
-   - R: mutate(new = old * 2)     -> SPSS: COMPUTE new = old * 2.
-   - R: if_else()                 -> SPSS: DO IF ... ELSE ... END IF.
-   - R: stop("Message")           -> SPSS: DO IF (condition). DISPLAY "Message". END IF.
+1. **Date Parsing (MANDATORY):**
+   - R input dates like "20230101" are STRINGS.
+   - You MUST convert them using: `COMPUTE var_new = NUMBER(var, YMD8).`
+   - NEVER use `DATE.DMY` with `SUBSTR`. It causes type mismatches.
+   - Always define the format: `FORMATS var_new (DATE11).`
 
-3. **Data Types:**
-   - Remember that `SUBSTR` returns a String. You cannot pass a String directly into math functions without `NUMBER()`.
+2. **No Nesting:**
+   - **NEVER** put `EXECUTE`, `AGGREGATE`, or `DATASET` commands inside a `DO IF` block.
+   - SPSS is procedural. Calculate variables globally first, then use `SELECT IF` to filter.
+   
+3. **Error Handling:**
+   - SPSS has no `STOP` command.
+   - Instead of stopping, flag the bad data and filter it out.
+   - Pattern:
+     ```spss
+     COMPUTE error_flag = (delay < 0).
+     SELECT IF (error_flag = 0).
+     ```
+
+4. **Variables:**
+   - Remember that `GET DATA` imports all columns as Strings (A50). You MUST explicitly convert them to numbers before doing math (e.g., subtraction).
 
 R CODE INPUT:
 {r_code}

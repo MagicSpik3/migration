@@ -62,6 +62,7 @@ calc_registration_delays <- function(data) {
 }
 """
 
+from src.converter.agent import SPSSRefiningAgent #
 
 class TestGenericEquivalence(unittest.TestCase):
 
@@ -71,7 +72,6 @@ class TestGenericEquivalence(unittest.TestCase):
         self.r_output_json = os.path.join(self.test_dir, "r_output.json")
         self.spss_output_csv = os.path.join(self.test_dir, "spss_output.csv")
         self.spss_syntax_file = os.path.join(self.test_dir, "run.sps")
-
 
 
     def test_end_to_end_equivalence(self):
@@ -93,11 +93,12 @@ class TestGenericEquivalence(unittest.TestCase):
                 print(f"[DEBUG] Invalid JSON: {schema_json_str}")
                 self.fail("LLM returned invalid JSON schema")
 
-            # 2. Generate Data
-            print("2. Generating Synthetic Data...")
+            # 2. Generate Data & Run R (Same as before)
+            print("2. Generating Data & Running R...")
             generator = UniversalDataGenerator(schema)
             inputs = generator.generate_inputs(rows=50)
-            
+    
+
             args_map = {}
             for arg_name, val in inputs.items():
                 if isinstance(val, pd.DataFrame):
@@ -107,69 +108,94 @@ class TestGenericEquivalence(unittest.TestCase):
                 else:
                     args_map[arg_name] = val
 
-            # 3. Run R Probe (Truth)
-            print("3. Running R Probe...")
+
+
+
+
             args_json_str = json.dumps(args_map)
             cmd = ["Rscript", R_PROBE_SCRIPT, TARGET_FUNCTION, args_json_str, self.r_output_json, R_PKG_PATH]
+            subprocess.run(cmd, check=True) # Let it crash if R fails (we trust R probe now)
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                self.fail(f"R execution failed:\n{result.stderr}")
-                
-            # Convert R output to CSV for comparison
             with open(self.r_output_json, 'r') as f:
                 r_data = json.load(f)
                 df_r = pd.DataFrame(r_data) if isinstance(r_data, (list, dict)) else pd.DataFrame([r_data])
                 r_csv_path = os.path.join(self.test_dir, "r_converted_truth.csv")
                 df_r.to_csv(r_csv_path, index=False)
 
-            # 4. Generate SPSS Syntax
-            print("4. Generating SPSS Syntax...")
-            spss_prompt = CANDIDATE_PROMPT_TEMPLATE.format(
-                system_prompt=SYSTEM_PROMPT, 
-                r_code=TARGET_SOURCE_CODE
-            )
-            spss_code = get_ollama_response(spss_prompt)
-            
-            print(f"\n[DEBUG] Generated SPSS Code:\n{'-'*40}\n{spss_code}\n{'-'*40}")
-
-            # 5. Running SPSS...
-            print("5. Running SPSS...")
-            
-            # --- DYNAMICALLY BUILD VARIABLE LIST ---
-            # We read the CSV header to tell PSPP what variables to expect.
-            # We default to A50 (String) for safety, letting the LLM convert them if needed.
-            df_head = pd.read_csv(self.input_csv, nrows=1)
-            var_list_syntax = "\n".join([f"    {col} A50" for col in df_head.columns])
-
-            full_syntax = f"""
-            GET DATA /TYPE=TXT
-            /FILE='{self.input_csv}'
-            /ARRANGEMENT=DELIMITED
-            /DELCASE=LINE
-            /FIRSTCASE=2
-            /DELIMITERS=","
-            /VARIABLES=
-            {var_list_syntax}.
-            
-            * Run Translated Logic.
-            {spss_code}
-            
-            SAVE TRANSLATE
-            /OUTFILE='{self.spss_output_csv}'
-            /TYPE=CSV
-            /REPLACE.
-            """
-            
-            with open(self.spss_syntax_file, 'w') as f:
-                f.write(full_syntax)
+            # 3. DEFINE THE COMPILER CALLBACK
+            # This function runs PSPP and tells the Agent if it worked.
+            def validate_spss(code_candidate):
+                # Create the full syntax wrapper (Import CSV + Candidate Code + Export)
+                df_head = pd.read_csv(self.input_csv, nrows=1)
+                var_list_syntax = "\n".join([f"    {col} A50" for col in df_head.columns])
                 
-            pspp_res = subprocess.run(['pspp', self.spss_syntax_file], capture_output=True, text=True)
+                full_syntax = f"""
+                GET DATA /TYPE=TXT
+                /FILE='{self.input_csv}'
+                /ARRANGEMENT=DELIMITED
+                /DELCASE=LINE
+                /FIRSTCASE=2
+                /DELIMITERS=","
+                /VARIABLES=
+                {var_list_syntax}.
+                
+                * --- CANDIDATE CODE START ---
+                {code_candidate}
+                * --- CANDIDATE CODE END ---
+                
+                SAVE TRANSLATE
+                /OUTFILE='{self.spss_output_csv}'
+                /TYPE=CSV
+                /REPLACE.
+                """
+                
+                with open(self.spss_syntax_file, 'w') as f:
+                    f.write(full_syntax)
+                
+                # Run PSPP
+                res = subprocess.run(['pspp', self.spss_syntax_file], capture_output=True, text=True)
+                
+                # Check success (Exit code 0 AND output file exists)
+                if res.returncode == 0 and os.path.exists(self.spss_output_csv):
+                    return True, ""
+                else:
+                    # Return the error message so the Agent can fix it
+                    return False, f"PSPP Error:\n{res.stdout}\n{res.stderr}"
+
+            # 4. Generate & Refine SPSS Syntax
+            print("4. Generating & Refining SPSS Syntax...")
             
-            if pspp_res.returncode != 0 or not os.path.exists(self.spss_output_csv):
-                print(f"\n[DEBUG] PSPP STDOUT:\n{pspp_res.stdout}")
-                print(f"\n[DEBUG] PSPP STDERR:\n{pspp_res.stderr}")
-                self.fail(f"PSPP Failed to generate output.")
+            # --- NEW: LOAD ROSETTA STONE ---
+            rosetta_path = "spss_rosetta_stone.csv"
+            if os.path.exists(rosetta_path):
+                df_rosetta = pd.read_csv(rosetta_path)
+                # Filter to only relevant columns to save token space
+                mapping_table = df_rosetta[['r_function', 'spss_equivalent']].to_markdown(index=False)
+                
+                # Inject into the System Prompt
+                enhanced_system_prompt = (
+                    f"{SYSTEM_PROMPT}\n\n"
+                    f"### APPROVED TRANSLATION TABLE (USE THESE MAPPINGS):\n"
+                    f"{mapping_table}\n\n"
+                    f"RULES:\n"
+                    f"1. If an R function appears in the table above, you MUST use the provided SPSS Equivalent.\n"
+                    f"2. Specifically for dates: Do NOT use DATE() or SUBSTR(). Use NUMBER(var, YMD8).\n"
+                )
+            else:
+                print("[WARNING] Rosetta Stone CSV not found. Using default prompt.")
+                enhanced_system_prompt = SYSTEM_PROMPT
+
+            # Initialize Agent with the ENHANCED prompt
+            agent = SPSSRefiningAgent(system_prompt=enhanced_system_prompt)
+            
+            conversion_request = f"Convert this R code to SPSS:\n\n{TARGET_SOURCE_CODE}"
+            
+            try:
+                final_spss_code = agent.generate_and_refine(conversion_request, validate_spss)
+                print(f"\n[DEBUG] Final Accepted Syntax:\n{'-'*40}\n{final_spss_code}\n{'-'*40}")
+            except RuntimeError as e:
+                self.fail(str(e))
+                
 
             # 6. Compare
             print("6. Comparing Results...")
