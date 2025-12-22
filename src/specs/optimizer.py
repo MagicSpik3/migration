@@ -11,14 +11,17 @@ You are a Senior R Developer.
 Refactor this code to be idiomatic `tidyverse` and FIX logical errors.
 
 ### RULES:
-1. **No String Parsing:** Replace `substr`/`paste` with `lubridate::ymd()`.
-2. **Fix Time Arrow Logic:** - We are calculating the delay between Death and Registration.
-   - Registration happens AFTER Death.
-   - ❌ WRONG: `date_death - date_reg` (Calculates negative days).
-   - ✅ RIGHT: `date_reg - date_death` (Calculates positive delay).
-   - **ACTION:** If you see the wrong order, SWAP IT.
-3. **Safety:** - Use `as.numeric(difftime(date_reg, date_death, units="days"))`.
-   - Ensure the function returns the dataframe.
+1. **Case Sensitivity:** (Keep existing...)
+2. **Type Safety:** (Keep existing...)
+3. **Naming & Side Effects:** (Keep existing...)
+
+4. **Pipeline Continuity:** (Keep existing...)
+
+5. **Boundary Completeness (CRITICAL):**
+   - Check `case_when` logic for numeric gaps (Off-by-One errors).
+   - ❌ GAP: `between(age, 18, 64)` then `age > 65` (Misses 65!)
+   - ✅ FIXED: `between(age, 18, 64)` then `age >= 65`
+   - Ensure the conditions cover the entire numeric range or provide a `.default`.
 
 ### INPUT:
 ```r
@@ -76,80 +79,141 @@ class CodeOptimizer:
         shutil.copy(r_path, dest)
         return filename
 
-    def check_lint_score(self, r_path):
-        """
-        Runs lintr with a permissive config (allows %>% and dplyr globals).
-        """
-        lint_cmd = (
-            f"library(lintr); "
-            # Disable object_usage (globals) and pipe_consistency (%>% vs |>)
-            f"custom_linters <- linters_with_defaults("
-            f"  object_usage_linter = NULL, "
-            f"  pipe_consistency_linter = NULL"
-            f"); "
-            f"issues <- lint('{r_path}', linters = custom_linters); "
-            f"print(issues); "
-            f"cat(paste0('||COUNT||', length(issues)))"
-        )
 
-        cmd = ["Rscript", "-e", lint_cmd]
-        
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            if res.returncode != 0:
-                return 999 # Lintr failed
+
+    def check_lint_score(self, r_path):
+            """
+            Runs lintr with a pragmatic configuration for Migration:
+            - Line Length: 120 chars (Modern standard)
+            - Pipes: Allows %>%
+            - Returns: Allows explicit return()
+            - Globals: Allows dplyr column names
+            - Assignment: Allows -> (Right assignment)
+            """
+            lint_cmd = (
+                f"library(lintr); "
+                f"custom_linters <- linters_with_defaults("
+                f"  line_length_linter = line_length_linter(120), "
+                f"  object_usage_linter = NULL, "
+                f"  pipe_consistency_linter = NULL, "
+                f"  return_linter = NULL, "
+                f"  assignment_linter = NULL" 
+                f"); "
+                f"issues <- lint('{r_path}', linters = custom_linters); "
+                f"print(issues); "
+                f"cat(paste0('||COUNT||', length(issues)))"
+            )
+
+            cmd = ["Rscript", "-e", lint_cmd]
             
-            output_parts = res.stdout.split("||COUNT||")
-            report = output_parts[0].strip()
-            count = int(output_parts[1].strip()) if len(output_parts) > 1 else 999
-            
-            if count > 0:
-                print(f"\n   --- Lintr Report for {os.path.basename(r_path)} ---")
-                print(report)
-                print("   -----------------------------------------------\n")
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                if res.returncode != 0:
+                    print(f"   ⚠️  Lintr failed to run. (Error: {res.stderr.strip()})")
+                    return 999
                 
-            return count
-        except Exception:
-            return 999
+                output_parts = res.stdout.split("||COUNT||")
+                report = output_parts[0].strip()
+                count = int(output_parts[1].strip()) if len(output_parts) > 1 else 999
+                
+                if count > 0:
+                    print(f"\n   --- Lintr Report for {os.path.basename(r_path)} ---")
+                    print(report)
+                    print("   -----------------------------------------------\n")
+                    
+                return count
+            except Exception as e:
+                print(f"   ⚠️  Lintr execution error: {e}")
+                return 999
+
+
 
     def test_function(self, r_path, func_name):
-        """Runs the micro-test."""
-        wrapper_path = os.path.join(os.path.dirname(r_path), f"test_{func_name}.R")
-        data_path = os.path.join(self.repo_root, "input_data.csv")
-        
-        # FINAL CHECK: Does data exist?
-        if not os.path.exists(data_path):
-            return f"FAIL: Data not found at {data_path}"
+            """Runs the micro-test with Enhanced Debugging."""
+            wrapper_path = os.path.join(os.path.dirname(r_path), f"test_{func_name}.R")
+            data_path = os.path.join(self.repo_root, "input_data.csv")
+            
+            if not os.path.exists(data_path):
+                return f"FAIL: Data not found at {data_path}"
 
-        r_script = f"""
-        suppressPackageStartupMessages(library(dplyr))
-        suppressPackageStartupMessages(library(lubridate))
-        
-        tryCatch({{
-            source("{r_path}")
+            r_script = f"""
+            # Load the Full Tidyverse Suite
+            suppressPackageStartupMessages(library(dplyr))
+            suppressPackageStartupMessages(library(lubridate))
+            suppressPackageStartupMessages(library(readr))
             
-            df <- read.csv("{data_path}", colClasses = "character")
-            res <- {func_name}(df)
+            # Enable traceback on error
+            options(error = function() {{
+                cat("\\n--- R TRACEBACK ---\\n")
+                traceback()
+                cat("--------------------\\n")
+                quit(save = "no", status = 1)
+            }})
             
-            if(nrow(res) == 0) stop("Empty Result")
-            if("delay_days" %in% names(res)) {{
-                if(any(res$delay_days < 0)) stop("Negative Delay Detected (Logic Inverted)")
-            }}
-            cat("PASS")
-        }}, error = function(e) {{
-            cat("FAIL:", e$message)
-        }})
-        """
-        
-        with open(wrapper_path, 'w') as f:
-            f.write(r_script)
+            tryCatch({{
+                source("{r_path}")
+                
+                # Load Data
+                if(!file.exists("{data_path}")) stop("Input CSV missing")
+                df <- read.csv("{data_path}", colClasses = "character")
+                
+                # Debug: Print schema before run
+                # cat("DEBUG: Input Columns:", paste(names(df), collapse=", "), "\\n")
+                
+                # Execution
+                res <- {func_name}(df)
+                
+                # Validation
+                if(nrow(res) == 0) stop("Empty Result Dataframe")
+                
+                # Logic Check (Time Arrow)
+                if("delay_days" %in% names(res)) {{
+                    delays <- as.numeric(res$delay_days)
+                    # Handle case where all delays might be NA
+                    clean_delays <- na.omit(delays)
+                    if(length(clean_delays) > 0 && any(clean_delays < 0)) {{
+                        stop("Negative Delay Detected (Logic Inverted)")
+                    }}
+                }}
+                
+                cat("PASS")
+            }}, error = function(e) {{
+                cat("FAIL:", e$message)
+                # We trigger the global error handler to get the traceback
+                stop(e)
+            }})
+            """
             
-        try:
-            res = subprocess.run(["Rscript", wrapper_path], capture_output=True, text=True)
-            return res.stdout.strip()
-        finally:
-            if os.path.exists(wrapper_path): os.remove(wrapper_path)
-
+            with open(wrapper_path, 'w') as f:
+                f.write(r_script)
+                
+            try:
+                # Capture both stdout and stderr
+                res = subprocess.run(
+                    ["Rscript", wrapper_path], 
+                    capture_output=True, 
+                    text=True
+                )
+                
+                output = res.stdout.strip()
+                
+                # If R crashed or printed a FAIL message
+                if res.returncode != 0 or "FAIL:" in output:
+                    print(f"\n   🐛 DEBUG: Test Failed for {func_name}")
+                    print(f"   🛑 Output: {output}")
+                    print(f"   🛑 Errors: {res.stderr.strip()}")
+                    
+                    # Extract the failure message cleanly if possible
+                    if "FAIL:" in output:
+                        return output.split("FAIL:")[1].split("\n")[0].strip()
+                    return "FAIL: R Runtime Error (See Debug Log)"
+                    
+                return "PASS"
+                
+            finally:
+                # Cleanup only on success? No, let's keep it clean.
+                # You can comment this out if you want to inspect 'test_func.R' manually
+                if os.path.exists(wrapper_path): os.remove(wrapper_path)
 
 
     def auto_format_file(self, r_path):
@@ -160,7 +224,8 @@ class CodeOptimizer:
             subprocess.run(cmd, capture_output=True)
 
 
-    def optimize_file(self, entry):
+
+    def optimize_file(self, entry, force=False): # <--- Add force arg
             r_path = entry['r_file']
             func_name = entry['r_function_name']
             
@@ -169,28 +234,56 @@ class CodeOptimizer:
             
             # 1. Pre-Check
             issues_before = self.check_lint_score(r_path)
-            if issues_before == 0:
+            
+            # LOGIC CHANGE: Only skip if NOT forced
+            if issues_before == 0 and not force:
                 print(f"   ✅ Code is clean. Skipping.")
                 return
 
-            print(f"   ⚠️  Found {issues_before} style issues. Optimizing...")
+            if force:
+                print(f"   💪 Force Mode Active. Optimizing despite {issues_before} issues...")
+            else:
+                print(f"   ⚠️  Found {issues_before} style issues. Optimizing...")
 
 
-            # 2. Optimize (LLM Pass for Logic/Idioms)
+            # 2. Optimize (LLM Pass)
             with open(r_path, 'r') as f: original_code = f.read()
             prompt = OPTIMIZER_PROMPT.format(r_code=original_code)
-            new_code = get_ollama_response(prompt)
-            # Clean markdown...
-            if "```r" in new_code: new_code = new_code.split("```r")[1].split("```")[0]
-            elif "```" in new_code: new_code = new_code.split("```")[1].split("```")[0]
             
-            with open(r_path, 'w') as f: f.write(new_code.strip())
+            raw_response = get_ollama_response(prompt)
+            
+            # --- ROBUST EXTRACTION LOGIC ---
+            clean_code = raw_response.strip()
+            
+            # Case A: Standard Markdown Code Blocks
+            if "```r" in raw_response:
+                clean_code = raw_response.split("```r")[1].split("```")[0].strip()
+            elif "```R" in raw_response:
+                clean_code = raw_response.split("```R")[1].split("```")[0].strip()
+            elif "```" in raw_response:
+                clean_code = raw_response.split("```")[1].split("```")[0].strip()
+            
+            # Case B: Fallback - If LLM just dumped text, ensure it looks like code
+            # If it starts with "###" or "Here is", it's trash. We revert if we can't find code.
+            if clean_code.startswith("###") or clean_code.startswith("Here is"):
+                print("   ⚠️  LLM outputted conversational text without code blocks. Retrying extraction...")
+                # Try to find the function definition start
+                if f"{func_name} <- function" in raw_response:
+                    start_index = raw_response.find(f"{func_name} <- function")
+                    clean_code = raw_response[start_index:]
+                    # Rough cut for end of file? Usually unnecessary if we catch the start.
+                else:
+                    print("   ❌ Parse Failed: Could not isolate R code.")
+                    self.save_vintage(r_path, func_name, "parse_failed")
+                    return # Abort optimization for this file
+            
+            # Save the Cleaned Candidate
+            with open(r_path, 'w') as f: f.write(clean_code)
 
-            # --- NEW STEP: Mechanical Polish ---
+            # --- Mechanical Polish ---
             print("   🤖 Running 'styler' to fix whitespace...")
             self.auto_format_file(r_path)
-            # -----------------------------------
-
+            
             # 3. Test Functionality
             result = self.test_function(r_path, func_name)
             
@@ -198,7 +291,7 @@ class CodeOptimizer:
                 print(f"   ✅ Optimization SUCCESS.")
                 self.save_vintage(r_path, func_name, "optimized_success")
                 
-                # 4. Final Quality Check (The new step)
+                # 4. Final Quality Check
                 print("   --- Final Quality Check ---")
                 issues_after = self.check_lint_score(r_path)
                 if issues_after == 0:
@@ -212,14 +305,16 @@ class CodeOptimizer:
                 with open(r_path, 'w') as f: f.write(original_code)
 
 
-    def run(self):
-        with open(self.manifest_path, 'r') as f:
-            manifest = json.load(f)
-        
-        for entry in manifest:
-            if entry.get('role') == 'controller': continue
-            if not os.path.exists(entry['r_file']): continue
-            self.optimize_file(entry)
+    def run(self, force_all=False): # <--- Add force_all arg
+            with open(self.manifest_path, 'r') as f:
+                manifest = json.load(f)
+            
+            for entry in manifest:
+                if entry.get('role') == 'controller': continue
+                if not os.path.exists(entry['r_file']): continue
+                
+                # Pass the force flag down
+                self.optimize_file(entry, force=force_all)
 
 
 if __name__ == "__main__": 

@@ -14,25 +14,43 @@ class ManifestManager:
     def sanitize_function_name(self, filename):
         """
         Converts '01_calc_delays.sps' -> 'calc_delays'
-        Rules:
-        1. Lowercase.
-        2. Remove extension.
-        3. Remove leading numbers and underscores (regex).
         """
         base = os.path.splitext(filename)[0].lower()
-        # Regex: Start of string (^), followed by digits (\d+) and optional underscores ([_]*)
+        # Remove leading numbers/underscores (e.g., "01_")
         clean_name = re.sub(r'^\d+[_]*', '', base)
         return clean_name.replace(" ", "_")
+
+    def determine_role(self, file_path):
+        """
+        Analyzes file content to determine if it's a Controller or Logic.
+        Rule: If it contains INSERT or INCLUDE commands, it's a Controller.
+        """
+        try:
+            with open(file_path, 'r', errors='ignore') as f:
+                content = f.read()
+            
+            # Regex to look for INSERT or INCLUDE command (case insensitive)
+            # Matches: INSERT FILE=... or INCLUDE FILE=...
+            is_controller = re.search(r'^\s*(INSERT|INCLUDE)\s+FILE=', content, re.MULTILINE | re.IGNORECASE)
+            
+            if is_controller:
+                return "controller"
+            else:
+                return "logic"
+                
+        except Exception as e:
+            print(f"⚠️ Could not read {file_path}: {e}")
+            return "logic" # Default assumption
 
     def generate_manifest(self):
         print("--- Initializing Smart Manifest ---")
         
-        # 1. Resolve Dependencies
+        # 1. Resolve Dependencies (Still needed for execution order)
         resolver = DependencyResolver(self.spss_dir)
         resolver.scan()
         ordered_files = resolver.get_execution_order()
         
-        # Save architecture doc for your review
+        # Save architecture doc
         resolver.generate_architecture_doc(os.path.join(self.repo_root, "architecture.md"))
         
         manifest = []
@@ -40,29 +58,17 @@ class ManifestManager:
         for filename in ordered_files:
             full_path = resolver.file_map[filename]
             
-            # --- FIX 1: Sanitize Names (No numbers) ---
+            # 1. Sanitize Name
             r_func_name = self.sanitize_function_name(filename)
             
-            # --- FIX 2: Detect Controller Role ---
-            # If this file calls other files (out-degree > 0), it is a Controller.
-            # In our graph (Target points to Caller), this checks if 'filename' is in any list.
-            is_controller = False
-            for target, callers in resolver.graph.items():
-                if filename in callers: # If this file calls someone else
-                    is_controller = True
-                    break
-            
-            # Special case for explicit "Run" naming if graph is empty
-            if "run" in filename or "pipeline" in filename:
-                is_controller = True
-
-            role = "controller" if is_controller else "logic"
+            # 2. Determine Role by Content (The Fix)
+            role = self.determine_role(full_path)
             
             entry = {
                 "legacy_file": full_path,
                 "legacy_name": filename,
-                "r_function_name": r_func_name, # Clean name (calc_delays)
-                "role": role,                  # logic vs controller
+                "r_function_name": r_func_name,
+                "role": role,
                 "spec_file": os.path.join(self.specs_dir, f"{r_func_name}.md"),
                 "r_file": os.path.join(self.r_dir, f"{r_func_name}.R"),
                 "status": "pending"
@@ -76,6 +82,8 @@ class ManifestManager:
         print(f"✅ Manifest generated. Check {self.manifest_path}")
 
 if __name__ == "__main__":
+    # Ensure this points to where your .sps files actually are
     ROOT = os.path.expanduser("~/git/dummy_spss_repo/syntax")
+    
     manager = ManifestManager(ROOT)
     manager.generate_manifest()
