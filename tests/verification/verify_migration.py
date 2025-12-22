@@ -1,8 +1,22 @@
 import os
+import sys
+
+# --- FIX: Add Project Root to Path ---
+# Get the directory where this script lives (tests/verification)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up two levels to get the Project Root (migration/)
+project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+# Add it to the system path so Python can find 'src'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# --- NOW imports will work ---
 import pandas as pd
 import subprocess
 import tempfile
 import shutil
+# Import your custom reporter
+from src.reporting.report_generator import VerificationReport
 
 class MigrationVerifier:
     def __init__(self, spss_script, r_file):
@@ -75,7 +89,8 @@ class MigrationVerifier:
             print(f"STDERR:\n{result.stderr}")
             raise subprocess.CalledProcessError(result.returncode, result.args)
         
-            
+          
+
     def compare(self):
             print(f"\n--- Final Verification ---")
             self.generate_data()
@@ -121,9 +136,17 @@ class MigrationVerifier:
                 # Rounding to handle potentially different float precisions
                 df_spss['delay_days'] = df_spss['delay_days'].round(0)
                 df_r['delay_days'] = df_r['delay_days'].round(0)
-                
+              
                 pd.testing.assert_frame_equal(df_spss, df_r, check_dtype=False)
                 print("✅ MIGRATION SUCCESSFUL: R output matches SPSS exactly.")
+                
+                # --- NEW: Generate Certificate ---
+                report = VerificationReport("calc_delays", self.spss_out, self.r_out)
+                
+                # Save report to the repo root for easy viewing
+                report_path = os.path.expanduser("~/git/dummy_spss_repo/migration_certificate.html")
+                report.generate_html(report_path)
+            
                 return True
                 
             except subprocess.CalledProcessError:
