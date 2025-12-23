@@ -1,78 +1,86 @@
 import re
-import textwrap  # <--- NEW IMPORT
 from src.utils.ollama_client import get_ollama_response
 
 class RefiningAgent:
     def __init__(self, system_prompt, max_retries=3):
         self.system_prompt = system_prompt
         self.max_retries = max_retries
+        self.trace = []  # <--- NEW: Stores the conversation history
 
-    def extract_code(self, text):
-        """Robustly extracts R code from Markdown blocks or raw text."""
-        clean_text = ""
-        
-        # 1. Try Markdown blocks specifically for R
-        if "```r" in text:
-            clean_text = text.split("```r")[1].split("```")[0]
-        elif "```R" in text:
-            clean_text = text.split("```R")[1].split("```")[0]
-        
-        # 2. Try Generic blocks
-        elif "```" in text:
-            matches = re.findall(r"```(.*?)```", text, re.DOTALL)
-            if matches:
-                clean_text = max(matches, key=len)
-        
-        # 3. Heuristic/Fallback
-        else:
-            lines = text.split('\n')
-            start_idx = 0
-            for i, line in enumerate(lines):
-                if "library(" in line or "function(" in line or "<-" in line:
-                    start_idx = i
-                    break
-            clean_text = "\n".join(lines[start_idx:])
+    def extract_code(self, response):
+        """Extracts code from Markdown blocks or raw text."""
+        if "```r" in response:
+            return response.split("```r")[1].split("```")[0].strip()
+        elif "```" in response:
+            return response.split("```")[1].split("```")[0].strip()
+        return response.strip()
 
-        # --- THE FIX: Clean up indentation and whitespace ---
-        return textwrap.dedent(clean_text).strip()
+    def run(self, original_code, check_callback):
+        """
+        Runs the refinement loop.
+        check_callback(code) -> (bool_success, error_message)
+        """
+        self.trace = [] # Reset trace
+        current_code = original_code
+        error_history = ""
 
-    def run(self, initial_prompt, check_callback):
-        full_prompt = f"{self.system_prompt}\n\nTASK:\n{initial_prompt}"
-        response = get_ollama_response(full_prompt)
-        candidate_code = self.extract_code(response)
+        # Step 0: Initial Attempt (Draft 1)
+        # We treat the input code as 'Draft 1'. 
+        # Usually, the Optimizer calls this with the Architect's draft.
+        # Let's validate Draft 1 first.
         
-        print(f"   [Agent] Draft 1 generated.")
+        print("   [Agent] Validating initial draft...")
+        success, error = check_callback(current_code)
         
-        failure_history = []
+        self.trace.append({
+            "step": 0,
+            "type": "Initial Validation",
+            "code": current_code,
+            "success": success,
+            "error": error
+        })
 
+        if success:
+            return current_code
+
+        # Start the Retry Loop
+        error_history = f"Attempt 1 Failed: {error}"
+        
         for attempt in range(1, self.max_retries + 1):
-            success, error_msg = check_callback(candidate_code)
+            print(f"   [Agent] Asking LLM to fix (History: {attempt} failures)...")
             
-            if success:
-                return candidate_code
-            
-            # Verbose Logging
-            print(f"   [Agent] Attempt {attempt} failed.")
-            print(f"   ⚠️ ERROR: {error_msg.replace(chr(10), ' ')[:300]}...") 
-            
-            failure_history.append(f"--- ATTEMPT {attempt} ---\nCODE:\n{candidate_code}\nERROR:\n{error_msg}\n")
-            
-            # DEFINE THE MISSING VARIABLE
-            history_text = "\n".join(failure_history)
-            
-            print(f"   [Agent] Asking LLM to fix (History: {len(failure_history)} failures)...")
-            
-            fix_prompt = (
+            # Construct the Prompt
+            prompt = (
                 f"{self.system_prompt}\n\n"
-                f"The previous attempts FAILED. Use the error log to fix the code.\n"
-                f"=== FAILURE HISTORY ===\n"
-                f"{history_text}\n"
-                f"=======================\n"
-                f"TASK: Fix the code. Return ONLY the valid R syntax."
+                f"### CURRENT CODE:\n```r\n{current_code}\n```\n\n"
+                f"### ERROR HISTORY:\n{error_history}\n\n"
+                f"### TASK:\n"
+                f"Fix the code to resolve the error. Return the FULL corrected R code."
             )
+
+            # Call LLM
+            response = get_ollama_response(prompt)
+            new_code = self.extract_code(response)
+
+            # Validate
+            success, new_error = check_callback(new_code)
+
+            # Record Trace
+            self.trace.append({
+                "step": attempt,
+                "prompt": prompt,
+                "response": response,
+                "code_attempt": new_code,
+                "success": success,
+                "error": new_error
+            })
+
+            if success:
+                return new_code
             
-            response = get_ollama_response(fix_prompt)
-            candidate_code = self.extract_code(response)
-            
+            # Update History
+            error_history += f"\n\nAttempt {attempt+1} Failed: {new_error}"
+            current_code = new_code # Iterate on the new draft
+
         print(f"   ❌ [Agent] Exhausted {self.max_retries} retries.")
         return None

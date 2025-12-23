@@ -20,6 +20,11 @@ Translate the specification into a production-ready R function.
    - Output: `return(df)` (dataframe)
    - Do NOT use `library()` calls inside the function. Dependencies belong in the package definition.
 
+3. **Aggregation Safety:**
+   - IF you use `summarise()`, you destroy all other columns.
+   - **Decision:** If the pipeline continues after this function, you usually want `mutate()` with window functions (e.g. `sum(x) over group`) OR you must `left_join` the summary back to the original data.
+   - **Default:** Prefer `mutate()` for intermediate steps. Only use `summarise()` for final reports.
+
 ### DATA SCHEMA (THE TRUTH):
 The input `df` contains ONLY these columns:
 {columns}
@@ -38,11 +43,19 @@ Only the R code.
 """
 
 class RArchitect:
-    def __init__(self, manifest_path="migration_manifest.json"):
+    def __init__(self, manifest_path="migration_manifest.json", project_root=None):
         self.manifest_path = os.path.abspath(manifest_path)
+        
+        # Fallback for dummy repo default
         if not os.path.exists(self.manifest_path):
-            self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
-        self.repo_root = os.path.dirname(os.path.dirname(self.manifest_path))
+             self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
+        
+        # PATH FIX: If project_root is provided explicitly, use it.
+        # Otherwise, fall back to the old logic (guessing from manifest location).
+        if project_root:
+            self.repo_root = os.path.abspath(project_root)
+        else:
+            self.repo_root = os.path.dirname(os.path.dirname(self.manifest_path))
 
     def get_schema(self):
         csv_path = os.path.join(self.repo_root, "input_data.csv")
@@ -52,7 +65,7 @@ class RArchitect:
             if os.path.exists("input_data.csv"):
                  csv_path = "input_data.csv"
             else:
-                return "(No input_data.csv found - strictly follow spec)"
+                return f"(No input_data.csv found at {csv_path} - strictly follow spec)"
         
         try:
             with open(csv_path, 'r') as f:

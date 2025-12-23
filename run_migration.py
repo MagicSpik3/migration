@@ -27,8 +27,10 @@ def run_full_migration(target_dir, force_optimize=False):
 
     # 3. ARCHITECT (The Builder)
     print("\n[Step 3] 🏗️  Drafting R Code...")
-    architect = RArchitect()
+    # PASS THE TARGET DIR HERE!
+    architect = RArchitect(project_root=target_dir) 
     architect.run()
+
 
     # --- NEW STEP: STATIC VALIDATION ---
     print("\n[Step 3.5] 🧐 Validating Draft Logic...")

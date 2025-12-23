@@ -55,6 +55,12 @@ class QAEngineer:
             
         return [f"library({lib})" for lib in sorted(list(libs))]
 
+
+
+
+
+
+
     def generate_tests(self, entry):
         func_name = entry['r_function_name']
         r_path = entry['r_file']
@@ -77,11 +83,27 @@ class QAEngineer:
         
         prompt = QA_PROMPT.format(spec=spec_content, code=r_code)
         response = get_ollama_response(prompt)
-        
-        if "```r" in response: test_code = response.split("```r")[1].split("```")[0].strip()
-        elif "```" in response: test_code = response.split("```")[1].split("```")[0].strip()
-        else: test_code = response.strip()
+        # ... inside generate_tests ...
+        # --- IMPROVED CLEANUP ---
+        # 1. Strip Markdown Code Blocks
+        if "```r" in response: 
+            test_code = response.split("```r")[1].split("```")[0].strip()
+        elif "```" in response: 
+            test_code = response.split("```")[1].split("```")[0].strip()
+        else: 
+            test_code = response.strip()
 
+        # 2. Aggressive Header Removal (Fixes "1. **Mock Data" error)
+        # We drop everything before the first "library(" or "test_that("
+        lines = test_code.splitlines()
+        start_index = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("library(") or line.strip().startswith("test_that(") or line.strip().startswith("source("):
+                start_index = i
+                break
+        
+        test_code = "\n".join(lines[start_index:])
+        # ------------------------
         # Build Dynamic Header
         lib_calls = "\n".join(self.get_package_libs())
         header = f"{lib_calls}\n\nsource('{r_path}')\n\n"
@@ -96,18 +118,35 @@ class QAEngineer:
             
         return test_path
 
+
     def run_tests(self, test_path):
         cmd = ["Rscript", test_path]
         res = subprocess.run(cmd, capture_output=True, text=True)
+        
+        # Combine stdout and stderr, as testthat often prints to both
+        full_output = res.stdout + "\n" + res.stderr
+        
+        # Filter out noisy library attachment lines
+        clean_log = []
+        for line in full_output.splitlines():
+            if "Attaching package" in line: continue
+            if "The following objects are masked" in line: continue
+            if "library(" in line: continue
+            if line.strip() == "": continue
+            clean_log.append(line)
+            
         if res.returncode == 0:
             print(f"   ✅ Tests PASSED.")
             return True
         else:
             print(f"   ❌ Tests FAILED.")
             print(f"   --- Error Log ---")
-            print('\n'.join(res.stderr.splitlines()[:20]))
+            # Print the first 20 lines of the CLEAN log
+            print('\n'.join(clean_log[:20]))
             print("-------------------")
             return False
+
+
 
     def run(self):
         with open(self.manifest_path, 'r') as f: manifest = json.load(f)
