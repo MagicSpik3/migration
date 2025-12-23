@@ -3,7 +3,7 @@ import re
 import json
 from src.utils.ollama_client import get_ollama_response
 
-# --- 1. THE AGGRESSIVE PROMPT (Same as before) ---
+# --- 1. THE AGGRESSIVE PROMPT ---
 ANALYST_PROMPT = """
 You are a Technical Business Analyst.
 Your goal is to extract the **Business Intent**, NOT the Implementation Detail.
@@ -25,33 +25,31 @@ Your goal is to extract the **Business Intent**, NOT the Implementation Detail.
 Provide the Markdown Specification including the Mermaid block.
 """
 
-def repair_mermaid(text):
-    """Regex brute-force to ensure Mermaid labels are quoted."""
-    text = re.sub(r'\[\s*(?![\("])([^\]]+?)\s*\]', r'["\1"]', text)
-    text = re.sub(r'(?<!\{)\{\s*(?!["\{])([^\}]+?)\s*\}(?!\})', r'{"\1"}', text)
-    text = re.sub(r'\{\{\s*(?!")([^\}]+?)\s*\}\}', r'{{"\1"}}', text)
-    return text
+class SpecAnalyst:
+    def __init__(self, manifest_path="migration_manifest.json"):
+        self.manifest_path = os.path.abspath(manifest_path)
+        # Fallback logic
+        if not os.path.exists(self.manifest_path):
+             self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
+        
+        self.repo_root = os.path.dirname(os.path.dirname(self.manifest_path))
 
-def run_analyst(manifest_path="migration_manifest.json"):
-    # Load the Manifest (The Single Source of Truth)
-    if not os.path.exists(manifest_path):
-        print(f"❌ Manifest not found at {manifest_path}. Run manifest_manager first.")
-        return
+    def repair_mermaid(self, text):
+        """Regex brute-force to ensure Mermaid labels are quoted."""
+        text = re.sub(r'\[\s*(?![\("])([^\]]+?)\s*\]', r'["\1"]', text)
+        text = re.sub(r'(?<!\{)\{\s*(?!["\{])([^\}]+?)\s*\}(?!\})', r'{"\1"}', text)
+        text = re.sub(r'\{\{\s*(?!")([^\}]+?)\s*\}\}', r'{{"\1"}}', text)
+        return text
 
-    with open(manifest_path, 'r') as f:
-        manifest = json.load(f)
-
-    print(f"--- Running Analyst on {len(manifest)} files from Manifest ---")
-
-    for entry in manifest:
+    def analyze_file(self, entry):
         legacy_path = entry['legacy_file']
         spec_path = entry['spec_file']
         func_name = entry['r_function_name']
         
-        # Skip if legacy file is missing (sanity check)
+        # Skip if legacy file is missing
         if not os.path.exists(legacy_path):
             print(f"⚠️  Skipping {func_name}: Source file not found ({legacy_path})")
-            continue
+            return
 
         print(f"Analyzing {entry['legacy_name']} -> {os.path.basename(spec_path)}...")
         
@@ -62,7 +60,7 @@ def run_analyst(manifest_path="migration_manifest.json"):
         raw_response = get_ollama_response(prompt)
         
         # Apply the safety net
-        clean_response = repair_mermaid(raw_response)
+        clean_response = self.repair_mermaid(raw_response)
         
         # Ensure output directory exists
         os.makedirs(os.path.dirname(spec_path), exist_ok=True)
@@ -70,15 +68,20 @@ def run_analyst(manifest_path="migration_manifest.json"):
         with open(spec_path, 'w') as f:
             f.write(clean_response)
             
-        print(f"✅ Spec saved to {spec_path}")
+        print(f"   ✅ Spec saved to {spec_path}")
+
+    def run(self):
+        if not os.path.exists(self.manifest_path):
+            print(f"❌ Manifest not found at {self.manifest_path}. Run manifest_manager first.")
+            return
+
+        with open(self.manifest_path, 'r') as f:
+            manifest = json.load(f)
+
+        print(f"--- Running Analyst on {len(manifest)} files from Manifest ---")
+        for entry in manifest:
+            self.analyze_file(entry)
 
 if __name__ == "__main__":
-    # Assuming manifest is in the root of the repo relative to this script execution
-    # or passed as an argument. For this setup:
-    MANIFEST_PATH = os.path.abspath("migration_manifest.json")
-    
-    # If not found there, try the dummy repo location hardcoded
-    if not os.path.exists(MANIFEST_PATH):
-        MANIFEST_PATH = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
-        
-    run_analyst(MANIFEST_PATH)
+    analyst = SpecAnalyst()
+    analyst.run()

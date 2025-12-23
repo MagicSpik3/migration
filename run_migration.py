@@ -1,11 +1,14 @@
 import sys
 import argparse
+import os
 from src.utils.manifest_manager import ManifestManager
 from src.specs.analyst import SpecAnalyst
 from src.specs.architect import RArchitect
+from src.specs.validator import CodeValidator   # <--- NEW IMPORT
 from src.specs.optimizer import CodeOptimizer
 from src.specs.controller import PipelineController
-import os
+from src.specs.qa_engineer import QAEngineer
+from src.specs.package_manager import PackageManager
 
 def run_full_migration(target_dir, force_optimize=False):
     print("🚀 STARTING MIGRATION PIPELINE 🚀")
@@ -13,7 +16,6 @@ def run_full_migration(target_dir, force_optimize=False):
 
     # 1. MANIFEST (The Map)
     print("\n[Step 1] 🗺️  Mapping Dependencies...")
-    # Point to the 'syntax' folder inside the target repo
     syntax_dir = os.path.join(target_dir, "syntax")
     manager = ManifestManager(syntax_dir)
     manager.generate_manifest()
@@ -28,11 +30,32 @@ def run_full_migration(target_dir, force_optimize=False):
     architect = RArchitect()
     architect.run()
 
-    # 4. OPTIMIZER (The QA)
+    # --- NEW STEP: STATIC VALIDATION ---
+    print("\n[Step 3.5] 🧐 Validating Draft Logic...")
+    validator = CodeValidator()
+    if not validator.run():
+        print("\n🛑 PIPELINE HALTED: Critical Logic Errors detected in Draft.")
+        print("   The Architect produced code that breaks the pipeline (e.g., missing returns).")
+        sys.exit(1) # Fail fast so you don't optimize broken code
+    # -----------------------------------
+
+    # [Step 4] Optimizing & Testing...
     print("\n[Step 4] 🔧 Optimizing & Testing...")
     optimizer = CodeOptimizer()
-    # Runs with FORCE if requested, to catch logic bugs in "clean" code
     optimizer.run(force_all=force_optimize)
+    
+    # [Step 4.2] Packaging...
+    print("\n[Step 4.2] 📦 Packaging...")
+    pm = PackageManager(target_dir) 
+    pm.generate_description()
+
+    # [Step 4.5] QA Engineering...
+    print("\n[Step 4.5] 🧪 QA Engineering (Comprehensive Unit Tests)...")
+    qa = QAEngineer()
+    qa_passed = qa.run()
+    
+    if not qa_passed:
+        print("\n⚠️ WARNING: Some Unit Tests Failed.")
 
     # 5. CONTROLLER (The Orchestrator)
     print("\n[Step 5] 🎛️  Building Main Controller...")
