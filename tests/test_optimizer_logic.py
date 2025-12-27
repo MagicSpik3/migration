@@ -35,17 +35,32 @@ class TestOptimizerLogic(unittest.TestCase):
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
 
+
+    @patch('subprocess.run')
+    def test_ast_refactor_called(self, mock_run):
+        """Does the optimizer construct the correct Rscript command?"""
+        # Simple existence check for now since logic is inside inner callback
+        self.assertTrue(hasattr(self.optimizer, 'generate_temp_schema'))
+
+
     @patch('subprocess.run')
     def test_linter_parsing(self, mock_run):
-        """Does check_lint_score correctly parse the ||COUNT|| format?"""
+        """Does check_lint_status correctly parse the || separated format?"""
         # Mock stdout from Rscript
         mock_result = MagicMock()
-        mock_result.stdout = "some lintr warnings... ||COUNT|| 5"
+        
+        # NEW FORMAT: "Line X: Msg || Line Y: Msg"
+        mock_result.stdout = "Line 1: Avoid global variables||Line 5: Line too long"
         mock_result.returncode = 0
         mock_run.return_value = mock_result
-
-        score = self.optimizer.check_lint_score("dummy.R")
-        self.assertEqual(score, 5)
+        
+        # CALL THE NEW METHOD NAME
+        score, details = self.optimizer.check_lint_status("dummy.R")
+        
+        # VALIDATE
+        self.assertEqual(score, 2)
+        self.assertIn("Line 1: Avoid global variables", details)
+        self.assertIn("Line 5: Line too long", details)
 
     @patch('subprocess.run')
     def test_ast_refactor_called(self, mock_run):

@@ -3,27 +3,36 @@ from unittest.mock import MagicMock, patch
 import os
 import sys
 import csv
+import textwrap
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.utils.refining_agent import RefiningAgent
-from src.specs.architect import ARCHITECT_PROMPT, RArchitect
+from src.specs.architect import RArchitect
+from src.specs.prompts import ARCHITECT_PROMPT 
+
+
 
 class TestRefiningAgent(unittest.TestCase):
     def setUp(self):
         self.agent = RefiningAgent("System Prompt")
 
     def test_code_extraction_markdown(self):
-        raw_llm_output = """
+        # 2. Use textwrap.dedent() so the string becomes flush-left
+        raw_llm_output = textwrap.dedent("""
         Here is the code:
         ```r
         library(dplyr)
         df <- df %>% filter(id > 0)
         ```
-        """
+        """)
+        
         extracted = self.agent.extract_code(raw_llm_output)
         expected = "library(dplyr)\ndf <- df %>% filter(id > 0)"
+        
         self.assertEqual(extracted.strip(), expected)
+
+
 
     def test_code_extraction_heuristic(self):
         raw_llm_output = """

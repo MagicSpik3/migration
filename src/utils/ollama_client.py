@@ -33,11 +33,17 @@ def get_ollama_response(
     logger.info(f"Sending request to Ollama (Model: {model}, JSON Mode: {json_mode})...")
 
     headers = {"Content-Type": "application/json"}
+
     payload = {
-        "prompt": prompt,
         "model": model,
-        "stream": False
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.0,  # <--- CRITICAL FOR DETERMINISTIC CODE
+            "num_predict": 1000   # Ensure we don't get cut off
+        }
     }
+    
 
     if json_mode:
         payload["format"] = "json"

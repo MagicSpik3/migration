@@ -9,6 +9,10 @@ class RefiningAgent:
 
     def extract_code(self, response):
         """Extracts code from Markdown blocks or raw text."""
+        # FIX: Handle None input (caused by timeouts)
+        if not response:
+            return ""
+            
         if "```r" in response:
             return response.split("```r")[1].split("```")[0].strip()
         elif "```" in response:

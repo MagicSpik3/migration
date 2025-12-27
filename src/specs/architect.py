@@ -2,56 +2,15 @@ import json
 import os
 import csv
 from src.utils.ollama_client import get_ollama_response
-
-# WE USE DOUBLE BRACES {{ }} FOR LITERALS IN THE PROMPT TO PREVENT FORMATTING ERRORS
-ARCHITECT_PROMPT = """
-You are a Senior R Developer building an R Package. 
-Translate the specification into a production-ready R function.
-
-### RULES:
-1. **Explicit Namespacing (CRITICAL):**
-   - You MUST use double-colon syntax for all non-base functions.
-   - ❌ WRONG: `mutate(df, date = ymd(str_sub(x, 1, 4)))`
-   - ✅ RIGHT: `dplyr::mutate(df, date = lubridate::ymd(stringr::str_sub(x, 1, 4)))`
-   - *Exception:* You may use standard infix operators like `%>%` without `::`.
-
-2. **Pipeline Continuity:**
-   - Input: `df` (dataframe)
-   - Output: `return(df)` (dataframe)
-   - Do NOT use `library()` calls inside the function. Dependencies belong in the package definition.
-
-3. **Aggregation Safety:**
-   - IF you use `summarise()`, you destroy all other columns.
-   - **Decision:** If the pipeline continues after this function, you usually want `mutate()` with window functions (e.g. `sum(x) over group`) OR you must `left_join` the summary back to the original data.
-   - **Default:** Prefer `mutate()` for intermediate steps. Only use `summarise()` for final reports.
-
-### DATA SCHEMA (THE TRUTH):
-The input `df` contains ONLY these columns:
-{columns}
-**CRITICAL: DO NOT USE VARIABLES NOT LISTED ABOVE.**
-
-### KNOWLEDGE BASE:
-{glossary}
-
-### METADATA:
-- **Function Name:** `{target_name}`
-- **Specification:**
-{spec_content}
-
-### OUTPUT:
-Only the R code.
-"""
+from src.specs.prompts import ARCHITECT_PROMPT  # <--- IMPORT FROM REGISTRY
 
 class RArchitect:
     def __init__(self, manifest_path="migration_manifest.json", project_root=None):
         self.manifest_path = os.path.abspath(manifest_path)
         
-        # Fallback for dummy repo default
         if not os.path.exists(self.manifest_path):
              self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
         
-        # PATH FIX: If project_root is provided explicitly, use it.
-        # Otherwise, fall back to the old logic (guessing from manifest location).
         if project_root:
             self.repo_root = os.path.abspath(project_root)
         else:
@@ -60,7 +19,6 @@ class RArchitect:
     def get_schema(self):
         csv_path = os.path.join(self.repo_root, "input_data.csv")
         
-        # Test environment fallback
         if not os.path.exists(csv_path):
             if os.path.exists("input_data.csv"):
                  csv_path = "input_data.csv"
@@ -106,6 +64,7 @@ class RArchitect:
             with open(spec_path, 'r') as f: spec_content = f.read()
 
             try:
+                # Use the imported ARCHITECT_PROMPT
                 prompt = ARCHITECT_PROMPT.format(
                     target_name=entry['r_function_name'],
                     spec_content=spec_content,

@@ -8,7 +8,8 @@ import sys
 
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.specs.architect import RArchitect, ARCHITECT_PROMPT
+from src.specs.architect import RArchitect
+from src.specs.prompts import ARCHITECT_PROMPT 
 
 class TestArchitectLogic(unittest.TestCase):
 
