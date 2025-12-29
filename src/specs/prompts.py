@@ -418,3 +418,588 @@ Analyze the syntax and extract the **Business Logic** into a specification.
 # OPTIMIZER PROMPTS
 # ==========================================
 # ...
+
+
+# --- OPTIMIZER PROMPT ---
+OPTIMIZER_PROMPT_V2 = """You are a Senior R Developer.
+Refactor this code to be idiomatic `tidyverse` and FIX errors.
+
+### CONTEXT:
+* **Logic Status:** {logic_status}
+* **Style Issues:** {lint_issues}
+
+### RULES:
+
+1. **Type Safety (Metrics vs Dates):**
+* The input `df` is ALL CHARACTERS.
+* **Metrics (age, count):** CAST to numeric. `cut(as.numeric(age), ...)`
+* **Dates (dor, dod):** DO NOT cast to numeric. Parse as Date.
+
+2. **Date Math (STRICT):**
+* ❌ WRONG: `as.numeric(d1 - d2, units="days")`
+* ✅ RIGHT: `as.numeric(difftime(d1, d2, units="days"))`
+* **Inherited Columns:** If `date_death` exists from step 1, DO NOT re-parse it with `ymd()`.
+
+3. **Lubridate Syntax (CRITICAL):**
+* ❌ WRONG: `ymd(year_str, ...)` or `ymd(str_sub(...))`
+* ❌ WRONG: `as.numeric(date_string)` (e.g. 20200101 is not a date).
+* ✅ RIGHT: `ymd(col)` (Handles "20200101" automatically).
+* **Extraction:** Before using `month()` or `year()`, YOU MUST CAST: `month(ymd(date_col))`.
+
+4. **Math Safety (CRITICAL):**
+* ❌ WRONG: `mean(delay_days)` (Fails on character input).
+* ✅ RIGHT: `mean(suppressWarnings(as.numeric(delay_days)), na.rm = TRUE)`.
+* ALWAYS wrap `as.numeric()` in `suppressWarnings()` when dealing with raw user input.
+
+5. **Pipeline Continuity:**
+* If summarizing: `write.csv(summary_df, ...); return(df)`
+* Do NOT shadow function names (use `summary_df`, not `func_name`).
+
+6. **Output Hygiene:**
+* RETURN ONLY THE CODE.
+* Do NOT include "Explanation:" or text outside the code block.
+
+### INPUT:
+```r
+{r_code}
+
+```
+
+"""
+
+# --- QA ENGINEER PROMPT ---
+
+QA_PROMPT = """You are a QA Automation Engineer for R.
+Write a `testthat` test suite for the following R function.
+
+### THE FUNCTION TO TEST:
+
+```r
+{r_code}
+
+```
+
+### REQUIREMENTS:
+
+1. **Mock Data:** Create a small `mock_data` dataframe inside the test.
+* It must match the schema implied by the function (look for `df$col` or `mutate(col)` usage).
+* Include edge cases (e.g., negative values if there is filtering).
+
+
+2. **Execution:** Call the function: `result <- {func_name}(mock_data)`
+3. **Assertions:**
+* Check `nrow(result)` (Did filtering happen?).
+* Check `names(result)` (Were columns added?).
+* Check specific logic (e.g., `expect_equal(result$new_col[1], expected_value)`).
+
+
+4. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data
+mock_data <- data.frame(...)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions
+expect_s3_class(result, "data.frame")
+# Add logic assertions here...
+
+```
+
+}})
+"""
+
+# --- OPTIMIZER PROMPT ---
+OPTIMIZER_PROMPT_V2 = """You are a Senior R Developer.
+Refactor this code to be idiomatic `tidyverse` and FIX errors.
+
+### CONTEXT:
+* **Logic Status:** {logic_status}
+* **Style Issues:** {lint_issues}
+
+### RULES:
+
+1. **Type Safety (Metrics vs Dates):**
+* The input `df` is ALL CHARACTERS.
+* **Metrics (age, count):** CAST to numeric. `cut(as.numeric(age), ...)`
+* **Dates (dor, dod):** DO NOT cast to numeric. Parse as Date.
+
+2. **Date Math (STRICT):**
+* ❌ WRONG: `as.numeric(d1 - d2, units="days")`
+* ✅ RIGHT: `as.numeric(difftime(d1, d2, units="days"))`
+* **Inherited Columns:** If `date_death` exists from step 1, DO NOT re-parse it with `ymd()`.
+
+3. **Lubridate Syntax (CRITICAL):**
+* ❌ WRONG: `ymd(year_str, ...)` or `ymd(str_sub(...))`
+* ❌ WRONG: `as.numeric(date_string)` (e.g. 20200101 is not a date).
+* ✅ RIGHT: `ymd(col)` (Handles "20200101" automatically).
+* **Extraction:** Before using `month()` or `year()`, YOU MUST CAST: `month(ymd(date_col))`.
+
+4. **Math Safety (CRITICAL):**
+* ❌ WRONG: `mean(delay_days)` (Fails on character input).
+* ✅ RIGHT: `mean(suppressWarnings(as.numeric(delay_days)), na.rm = TRUE)`.
+* ALWAYS wrap `as.numeric()` in `suppressWarnings()` when dealing with raw user input.
+
+5. **Pipeline Continuity:**
+* If summarizing: `write.csv(summary_df, ...); return(df)`
+* Do NOT shadow function names (use `summary_df`, not `func_name`).
+
+6. **Output Hygiene:**
+* RETURN ONLY THE CODE.
+* Do NOT include "Explanation:" or text outside the code block.
+
+### INPUT:
+```r
+{r_code}
+
+```
+
+"""
+
+# --- QA ENGINEER PROMPT ---
+
+QA_PROMPT = """You are a QA Automation Engineer for R.
+Write a `testthat` test suite for the following R function.
+
+### THE FUNCTION TO TEST:
+
+```r
+{r_code}
+
+```
+
+### REQUIREMENTS:
+
+1. **Mock Data:** Create a small `mock_data` dataframe inside the test.
+* It must match the schema implied by the function (look for `df$col` or `mutate(col)` usage).
+* **Crucial:** Include an `id` column to track rows safely.
+* Include edge cases (e.g., negative values, NAs).
+
+
+2. **Assertions (ROBUST):**
+* ❌ BAD: `result$col[2]` (Fragile if rows are reordered/filtered).
+* ✅ GOOD: `result %>% filter(id == 1) %>% pull(col)` (Safe lookup).
+* Check `nrow(result)` to verify filtering logic.
+* Check calculation logic for specific IDs.
+
+
+3. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data
+mock_data <- data.frame(
+id = c(1, 2, 3),
+# ... other cols ...
+)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions
+expect_s3_class(result, "data.frame")
+
+# Example: Check ID 1
+val_1 <- result %>% filter(id == 1) %>% pull(target_col)
+expect_equal(val_1, expected_value)
+
+```
+
+}})
+"""
+# --- OPTIMIZER PROMPT ---
+OPTIMIZER_PROMPT_V2 = """You are a Senior R Developer.
+Refactor this code to be idiomatic `tidyverse` and FIX errors.
+
+### CONTEXT:
+* **Logic Status:** {logic_status}
+* **Style Issues:** {lint_issues}
+
+### RULES:
+
+0. **Dependency Management (MANDATORY):**
+* You MUST include `library(...)` calls for EVERY package used.
+* If you use `str_sub`, you MUST include `library(stringr)`.
+* If you use `ymd`, you MUST include `library(lubridate)`.
+* DO NOT assume libraries are loaded globally.
+
+1. **Type Safety (Metrics vs Dates):**
+* The input `df` is ALL CHARACTERS.
+* **Metrics (age, count):** CAST to numeric. `cut(as.numeric(age), ...)`
+* **Dates (dor, dod):** DO NOT cast to numeric. Parse as Date.
+
+2. **Date Math (STRICT):**
+* ❌ WRONG: `as.numeric(d1 - d2, units="days")`
+* ✅ RIGHT: `as.numeric(difftime(d1, d2, units="days"))`
+* **Inherited Columns:** If `date_death` exists from step 1, DO NOT re-parse it with `ymd()`.
+
+3. **Lubridate Syntax (CRITICAL):**
+* ❌ WRONG: `ymd(year_str, ...)` or `ymd(str_sub(...))`
+* ❌ WRONG: `as.numeric(date_string)` (e.g. 20200101 is not a date).
+* ✅ RIGHT: `ymd(col)` (Handles "20200101" automatically).
+* **Extraction:** Before using `month()` or `year()`, YOU MUST CAST: `month(ymd(date_col))`.
+
+4. **Math Safety (CRITICAL):**
+* ❌ WRONG: `mean(delay_days)` (Fails on character input).
+* ✅ RIGHT: `mean(suppressWarnings(as.numeric(delay_days)), na.rm = TRUE)`.
+* ALWAYS wrap `as.numeric()` in `suppressWarnings()` when dealing with raw user input.
+
+5. **Pipeline Continuity:**
+* If summarizing: `write.csv(summary_df, ...); return(df)`
+* Do NOT shadow function names (use `summary_df`, not `func_name`).
+
+6. **Output Hygiene:**
+* RETURN ONLY THE CODE.
+* Do NOT include "Explanation:" or text outside the code block.
+
+### INPUT:
+```r
+{r_code}
+
+```
+
+"""
+
+# --- QA ENGINEER PROMPT ---
+
+QA_PROMPT = """You are a QA Automation Engineer for R.
+Write a `testthat` test suite for the following R function.
+
+### THE FUNCTION TO TEST:
+
+```r
+{r_code}
+
+```
+
+### REQUIREMENTS:
+
+1. **Mock Data:** Create a small `mock_data` dataframe inside the test.
+* It must match the schema implied by the function (look for `df$col` or `mutate(col)` usage).
+* **Crucial:** Include an `id` column to track rows safely.
+* Include edge cases (e.g., negative values, NAs).
+
+
+2. **Assertions (ROBUST):**
+* ❌ BAD: `result$col[2]` (Fragile if rows are reordered/filtered).
+* ✅ GOOD: `result %>% filter(id == 1) %>% pull(col)` (Safe lookup).
+* Check `nrow(result)` to verify filtering logic.
+* Check calculation logic for specific IDs.
+
+
+3. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data
+mock_data <- data.frame(
+id = c(1, 2, 3),
+# ... other cols ...
+)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions
+expect_s3_class(result, "data.frame")
+
+# Example: Check ID 1
+val_1 <- result %>% filter(id == 1) %>% pull(target_col)
+expect_equal(val_1, expected_value)
+
+```
+
+}})
+"""
+# --- OPTIMIZER PROMPT ---
+OPTIMIZER_PROMPT_V2 = """You are a Senior R Developer.
+Refactor this code to be idiomatic `tidyverse` and FIX errors.
+
+### CONTEXT:
+* **Logic Status:** {logic_status}
+* **Style Issues:** {lint_issues}
+
+### RULES:
+
+0. **Dependency Management (MANDATORY):**
+* You MUST include `library(...)` calls for EVERY package used.
+* If you use `str_sub`, you MUST include `library(stringr)`.
+* If you use `ymd`, you MUST include `library(lubridate)`.
+
+1. **Type Safety (Metrics vs Dates):**
+* The input `df` is ALL CHARACTERS.
+* **Metrics (age, count):** CAST to numeric. `cut(as.numeric(age), ...)`
+* **Dates (dor, dod):** DO NOT cast to numeric. Parse as Date.
+
+2. **Date Math (STRICT):**
+* ❌ WRONG: `as.numeric(d1 - d2, units="days")`
+* ✅ RIGHT: `as.numeric(difftime(d1, d2, units="days"))`
+* **Inherited Columns:** If `date_death` exists from step 1, DO NOT re-parse it with `ymd()`.
+
+3. **Lubridate Syntax (CRITICAL):**
+* ❌ WRONG: `ymd(year_str, ...)` or `ymd(str_sub(...))`
+* ❌ WRONG: `as.numeric(date_string)` (e.g. 20200101 is not a date).
+* ✅ RIGHT: `ymd(col)` (Handles "20200101" automatically).
+* **Extraction:** Before using `month()` or `year()`, YOU MUST CAST: `month(ymd(date_col))`.
+
+4. **Math Safety (CRITICAL):**
+* ❌ WRONG: `mean(delay_days)` (Fails on character input).
+* ✅ RIGHT: `mean(suppressWarnings(as.numeric(delay_days)), na.rm = TRUE)`.
+* ALWAYS wrap `as.numeric()` in `suppressWarnings()` when dealing with raw user input.
+
+5. **Pipeline Continuity:**
+* If summarizing: `write.csv(summary_df, ...); return(df)`
+* Do NOT shadow function names (use `summary_df`, not `func_name`).
+
+6. **Output Hygiene:**
+* RETURN ONLY THE CODE.
+* Do NOT include "Explanation:" or text outside the code block.
+
+### INPUT:
+```r
+{r_code}
+
+```
+
+"""
+
+# --- QA ENGINEER PROMPT ---
+
+QA_PROMPT = """You are a QA Automation Engineer for R.
+Write a `testthat` test suite for the following R function.
+
+### THE FUNCTION TO TEST:
+
+```r
+{r_code}
+
+```
+
+### REQUIREMENTS:
+
+1. **Mock Data:** Create a small `mock_data` dataframe inside the test.
+* It must match the schema implied by the function.
+* **Crucial:** Include an `id` column.
+* Include edge cases (NAs, negative values).
+
+
+2. **Assertions (Explicit & Simple):**
+* ❌ BAD: `expect_equal(nrow(res), nrow(mock) - sum(is.na(mock$col)))` (Dynamic formulas are prone to bugs).
+* ✅ GOOD: `expect_equal(nrow(res), 1)` (Hardcode the expected count based on your mock data).
+* If the function filters data (e.g. removes NAs), ensures your assertions expect the *filtered* count.
+* Use `filter(id == X)` to check specific rows.
+
+
+3. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data (Define simple cases)
+mock_data <- data.frame(
+id = c(1, 2, 3),
+date_col = c("2020-01-01", NA, "2020-01-02"),
+val_col = c(10, 10, -5) # Case 1: OK, Case 2: NA, Case 3: Negative
+)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions (Hardcode expectations)
+expect_s3_class(result, "data.frame")
+
+# If logic filters NAs and Negatives, we expect only ID 1 remains
+expect_equal(nrow(result), 1) 
+
+# Check ID 1 value
+val_1 <- result %>% filter(id == 1) %>% pull(target_col)
+expect_equal(val_1, expected_value)
+
+```
+
+}})
+"""
+
+# --- OPTIMIZER PROMPT ---
+OPTIMIZER_PROMPT_V2 = """You are a Senior R Developer.
+Refactor this code to be idiomatic `tidyverse` and FIX errors.
+
+### CONTEXT:
+* **Logic Status:** {logic_status}
+* **Style Issues:** {lint_issues}
+
+### RULES:
+
+0. **Dependency Management (MANDATORY):**
+* You MUST include `library(...)` calls for EVERY package used.
+* If you use `str_sub`, you MUST include `library(stringr)`.
+* If you use `ymd`, you MUST include `library(lubridate)`.
+
+1. **Type Safety (Metrics vs Dates):**
+* The input `df` is ALL CHARACTERS.
+* **Metrics (age, count):** CAST to numeric. `cut(as.numeric(age), ...)`
+* **Dates (dor, dod):** DO NOT cast to numeric. Parse as Date.
+
+2. **Date Math (STRICT):**
+* ❌ WRONG: `as.numeric(d1 - d2, units="days")`
+* ✅ RIGHT: `as.numeric(difftime(d1, d2, units="days"))`
+* **Inherited Columns:** If `date_death` exists from step 1, DO NOT re-parse it with `ymd()`.
+
+3. **Lubridate Syntax (CRITICAL):**
+* ❌ WRONG: `ymd(year_str, ...)` or `ymd(str_sub(...))`
+* ❌ WRONG: `as.numeric(date_string)` (e.g. 20200101 is not a date).
+* ✅ RIGHT: `ymd(col)` (Handles "20200101" automatically).
+* **Extraction:** Before using `month()` or `year()`, YOU MUST CAST: `month(ymd(date_col))`.
+
+4. **Math Safety (CRITICAL):**
+* ❌ WRONG: `mean(delay_days)` (Fails on character input).
+* ✅ RIGHT: `mean(suppressWarnings(as.numeric(delay_days)), na.rm = TRUE)`.
+* ALWAYS wrap `as.numeric()` in `suppressWarnings()` when dealing with raw user input.
+
+5. **Pipeline Continuity:**
+* If summarizing: `write.csv(summary_df, ...); return(df)`
+* Do NOT shadow function names (use `summary_df`, not `func_name`).
+
+6. **Output Hygiene:**
+* RETURN ONLY THE CODE.
+* Do NOT include "Explanation:" or text outside the code block.
+
+### INPUT:
+```r
+{r_code}
+
+```
+
+"""
+
+# --- QA ENGINEER PROMPT ---
+
+QA_PROMPT = """
+You are a QA Automation Engineer for R.
+Write a `testthat` test suite for the following R function.
+
+### THE FUNCTION TO TEST:
+
+```r
+{r_code}
+
+```
+
+### REQUIREMENTS:
+
+1. **Mock Data:** - Create `mock_data` with an `id` column.
+* **CRITICAL:** Ensure at least one row survives filtering!
+* Example: If filtering `delay > 0`, provide dates where `dod > dor`.
+* Do not create a "test case" that results in 0 rows unless verifying empty state.
+
+
+2. **Assertions (Explicit & Simple):**
+* ❌ BAD: `expect_equal(nrow(res), nrow(mock) - sum(is.na(mock$col)))` (Dynamic formulas).
+* ✅ GOOD: `expect_equal(nrow(res), 1)` (Hardcode expectations).
+* **Type Safety:** When checking numeric values (especially calculated delays), ALWAYS wrap the actual value in `as.numeric()`.
+* `expect_equal(as.numeric(val_1), 14)`
+
+
+
+
+3. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data (Define simple cases)
+mock_data <- data.frame(
+id = c(1, 2, 3),
+date_col = c("2020-01-01", NA, "2020-01-02"),
+# Case 1: Valid (Keep). Case 2: NA (Drop). Case 3: Invalid (Drop).
+val_col = c(10, NA, -5)
+)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions (Hardcode expectations)
+expect_s3_class(result, "data.frame")
+
+# We expect only ID 1 to remain
+expect_equal(nrow(result), 1) 
+
+# Check ID 1 value (Explicit cast to numeric)
+val_1 <- result %>% filter(id == 1) %>% pull(target_col)
+expect_equal(as.numeric(val_1), 10)
+
+
+
+
+3. **Format:** Return ONLY the R code block. No markdown text.
+
+### TEMPLATE:
+
+library(testthat)
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+test_that("{func_name} works correctly", {{
+# 1. Mock Data (Define simple cases)
+mock_data <- data.frame(
+id = c(1, 2, 3),
+date_col = c("2020-01-01", NA, "2020-01-02"),
+# Case 1: Valid (Keep). Case 2: NA (Drop). Case 3: Invalid (Drop).
+val_col = c(10, NA, -5)
+)
+
+```
+# 2. Run
+result <- {func_name}(mock_data)
+
+# 3. Assertions (Hardcode expectations)
+expect_s3_class(result, "data.frame")
+
+# We expect only ID 1 to remain
+expect_equal(nrow(result), 1) 
+
+# Check ID 1 value (Explicit cast to numeric)
+val_1 <- result %>% filter(id == 1) %>% pull(target_col)
+expect_equal(as.numeric(val_1), 10)
+
+```
+
+}})
+"""
