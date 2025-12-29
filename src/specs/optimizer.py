@@ -3,17 +3,15 @@ import json
 import subprocess
 import shutil
 import time
-import csv
 from src.utils.refining_agent import RefiningAgent
 from src.specs.prompts import OPTIMIZER_PROMPT_V2
 
 class CodeOptimizer: 
     def __init__(self, project_root="."): 
-        # Handle project root resolution
         self.project_root = os.path.abspath(project_root)
         self.manifest_path = os.path.join(self.project_root, "migration_manifest.json")
         
-        # Fallback for testing environments
+        # Fallback for dev environment
         if not os.path.exists(self.manifest_path):
              self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
              self.project_root = os.path.dirname(self.manifest_path)
@@ -21,7 +19,7 @@ class CodeOptimizer:
         self.snapshot_dir = os.path.join(self.project_root, "snapshots")
         os.makedirs(self.snapshot_dir, exist_ok=True)
         
-        # Ensure we can find the refactor helper
+        # Helper script for formatting
         self.refactor_script = os.path.join(os.path.dirname(__file__), "../utils/refactor.R")
         if not os.path.exists(self.refactor_script):
              self.refactor_script = os.path.abspath("src/utils/refactor.R")
@@ -91,7 +89,6 @@ class CodeOptimizer:
             if "PASS" in output: 
                 return True, "PASS"
             
-            # Extract error message
             err_msg = output.replace("FAIL:", "").strip()
             if not err_msg: err_msg = res.stderr.strip()
             return False, err_msg
@@ -117,7 +114,6 @@ class CodeOptimizer:
         
         if draft_passed:
             with open(r_path, 'r') as f: working_draft_code = f.read()
-            # Check style
             lint_score, lint_msg = self.check_lint_status(r_path)
             if lint_score == 0 and not force:
                 print("   ✅ Draft passed logic and style. No optimization needed.")
@@ -131,10 +127,9 @@ class CodeOptimizer:
         # --- 2. RUN OPTIMIZATION AGENT ---
         # Callback to validate candidate code inside the Agent loop
         def check_callback(candidate_code):
-            # Write candidate to disk to test it
             with open(r_path, 'w') as f: f.write(candidate_code)
             
-            # 1. Formatting (Standardize)
+            # 1. Standardize Format
             subprocess.run(["Rscript", self.refactor_script, r_path], capture_output=True)
             
             # 2. Logic Check
@@ -142,7 +137,6 @@ class CodeOptimizer:
             if not is_valid: return False, f"Runtime Error: {msg}"
             return True, "OK"
 
-        # Prepare Prompt
         with open(r_path, 'r') as f: current_code = f.read()
         prompt = OPTIMIZER_PROMPT_V2.format(
             logic_status=logic_status,
@@ -156,13 +150,10 @@ class CodeOptimizer:
 
         # --- 3. THE SAFETY LATCH (Revert if Regression) ---
         if final_code:
-            # Agent says it found a valid solution
             print("   ✅ Optimization SUCCESS.")
             self.save_vintage(r_path, func_name, "optimized")
         else:
-            # Agent failed to produce valid code
             print("   ❌ Optimization FAILED (Could not pass validation).")
-            
             if working_draft_code:
                 print("   ↩️  Reverting to Working Draft (Safety Latch).")
                 with open(r_path, 'w') as f: f.write(working_draft_code)
@@ -170,7 +161,7 @@ class CodeOptimizer:
                 print("   ⚠️ No working draft to revert to. Leaving file as is.")
 
     def run(self, force_all=False):
-        print("   Loading Manifest...")
+        print("   Loading Manifest for Optimization...")
         with open(self.manifest_path, 'r') as f: manifest = json.load(f)
         
         for entry in manifest:

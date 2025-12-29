@@ -4,7 +4,7 @@ import os
 from src.utils.manifest_manager import ManifestManager
 from src.specs.analyst import SpecAnalyst
 from src.specs.architect import RArchitect
-# Removed: from src.specs.validator import CodeValidator (No longer needed globally)
+# Removed validator import
 from src.specs.optimizer import CodeOptimizer
 from src.specs.controller import PipelineController
 from src.specs.qa_engineer import QAEngineer
@@ -30,18 +30,17 @@ def run_full_migration(target_dir, force_optimize=False):
     architect = RArchitect(project_root=target_dir) 
     architect.run()
 
-    # [Step 4] Optimizing & Testing...
-    # The Optimizer now handles "Mid-Stage Verification" internally per file
+    # [Step 4] Optimizing (Includes Validation & Safety Latch)
     print("\n[Step 4] 🔧 Optimizing & Testing (With Safety Latch)...")
     optimizer = CodeOptimizer(project_root=target_dir)
     optimizer.run(force_all=force_optimize)
     
-    # [Step 4.2] Packaging...
+    # [Step 4.2] Packaging
     print("\n[Step 4.2] 📦 Packaging...")
     pm = PackageManager(target_dir) 
     pm.generate_description()
 
-    # [Step 4.5] QA Engineering...
+    # [Step 4.5] QA Engineering
     print("\n[Step 4.5] 🧪 QA Engineering (Comprehensive Unit Tests)...")
     qa = QAEngineer()
     qa_passed = qa.run()
