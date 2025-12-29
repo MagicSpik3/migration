@@ -319,3 +319,102 @@ The input `df` contains ONLY these columns:
 
 Only the R code.
 """
+
+
+# ... (Previous prompts) ...
+
+# ==========================================
+# DOCUMENTATION PROMPTS
+# ==========================================
+
+DOC_SUMMARY_PROMPT = """
+You are a Technical Writer for a Data Science team.
+Explain this SPSS syntax to a non-technical stakeholder (e.g., a Project Manager).
+
+### RULES:
+1. **Tone:** Professional, clear, concise. No jargon.
+2. **Focus:** Explain *what* the business logic achieves, not *how* the code works.
+   - ❌ Bad: "It uses AGGREGATE with /BREAK=region."
+   - ✅ Good: "The system calculates the average sales per region."
+3. **Structure:**
+   - **Objective:** One sentence summary.
+   - **Key Steps:** Bullet points of the main transformations.
+   - **Outcome:** What the final dataset represents.
+
+### SPSS CODE:
+{code}
+
+### OUTPUT:
+Markdown text.
+"""
+
+DOC_FLOW_PROMPT = """
+You are a Systems Analyst. Extract the high-level process flow from this SPSS code for a flowchart.
+
+### RULES:
+1. **Granularity:** Ignore minor details (sorting, renaming). Focus on major steps (Load, Filter, Calculate, Join, Save).
+2. **Format:** valid pipe-separated lines: `StepID | Label | Type`
+   - **StepID:** Short, unique identifier (no spaces).
+   - **Label:** Short description (max 5 words).
+   - **Type:** Choose from [Input, Logic, Data, End].
+
+### EXAMPLE OUTPUT:
+LoadData | Load Patient CSV | Input
+FilterActive | Keep only Active IDs | Logic
+CalcBMI | Calculate BMI | Logic
+SaveResult | Save to SQL | End
+
+### SPSS CODE:
+{code}
+
+### OUTPUT:
+Only the pipe-separated list.
+"""
+
+
+# ==========================================
+# ANALYST PROMPTS
+# ==========================================
+
+ANALYST_PROMPT = """
+You are a Systems Analyst migrating legacy SPSS to R.
+Analyze the syntax and extract the **Business Logic** into a specification.
+
+### CRITICAL RULES:
+1. **Trust Code Over Comments (The "Liar" Rule):**
+   - Comments are often outdated or wrong.
+   - ❌ Comment: `* Filter for Adults.` Code: `SELECT IF age < 18.` -> Spec: "Keep Children (Age < 18)."
+   - **Action:** If code contradicts comments, FOLLOW THE CODE.
+
+2. **Ignore Technical Noise:**
+   - The following commands are irrelevant for the business logic:
+     - `CACHE`, `EXECUTE`, `PRESERVE`, `RESTORE`
+     - `TITLE`, `SUBTITLE`, `PRINT`, `ECHO`
+     - `SET WIDTH`, `SET PRINTBACK`
+   - **Action:** Do NOT mention these in the output spec.
+
+3. **Decode Abbreviations:**
+   - `COMP` = `COMPUTE`
+   - `FREQ` = `FREQUENCIES`
+   - `RECODE` (old style `(1=1)`) -> Map values explicitly.
+
+### OUTPUT FORMAT (Markdown):
+# Requirement: {filename}
+
+## Objective
+(One sentence summary)
+
+## Transformation Logic
+* **Filter:** (e.g., Keep rows where...)
+* **New Variables:** (e.g., Calculate BMI as...)
+* **Aggregation:** (e.g., Sum sales by Region...)
+
+### SPSS INPUT:
+{spss_code}
+"""
+
+# ... (Keep your existing OPTIMIZER and ARCHITECT prompts below) ...
+# ==========================================
+# OPTIMIZER PROMPTS
+# ==========================================
+# ...
