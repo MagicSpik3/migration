@@ -71,7 +71,6 @@ class TestDocGeneratorComplex(unittest.TestCase):
         summary_text = "Calculates tax based on Region and Income tiers."
         
         # Mock 2: Flowchart Text (Simulating what LLM returns for branching)
-        # Note: The current engine linearizes this, but we test that it parses the *nodes* correctly.
         flow_response = """
         Start | Start Process | Input
         CheckRegion | Check Region (North/South) | Logic
@@ -100,7 +99,10 @@ class TestDocGeneratorComplex(unittest.TestCase):
         self.assertIn("graph TD;", content)
         
         # Check Nodes exist
-        self.assertIn('CheckRegion["Check Region (North/South)"]', content)
+        # FIX: Expect Rhombus {} because the ID contains "Check"
+        self.assertIn('CheckRegion{"Check Region (North/South)"}', content)
+        
+        # Check standard logic node
         self.assertIn('NorthBranch["Set Tax 15%"]', content)
         
         # Check Styling Classes applied
