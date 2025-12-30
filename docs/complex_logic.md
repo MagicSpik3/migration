@@ -1,7 +1,7 @@
-                    # Documentation: complex_logic
+# Documentation: complex_logic
 
-                    ## 1. Executive Summary
-                    ### Objective:
+## 1. Executive Summary
+### Objective:
 The system categorizes participants into age groups and calculates the average delay days by region.
 
 ### Key Steps:
@@ -16,9 +16,9 @@ The final dataset will include the following information for each region:
 
 This helps stakeholders understand how delays vary across different regions based on participant age groups.
 
-                    ## 2. Process Flowchart
-                    ```mermaid
-                    graph TD;
+## 2. Process Flowchart
+```mermaid
+graph TD;
     classDef script fill:#f9f,stroke:#333,stroke-width:2px;
     classDef data fill:#bbf,stroke:#333,stroke-width:2px;
     classDef logic fill:#dfd,stroke:#333,stroke-width:2px;
@@ -36,8 +36,8 @@ This helps stakeholders understand how delays vary across different regions base
     class RecodeAge logic;
     class AggregateData logic;
     class SaveResult script;
-                    ```
+```
 
-                    ## 3. Original Source
-                    * **File:** `03_complex_logic.sps`
-                    * **Migrated To:** `complex_logic.R`
+## 3. Original Source
+* **File:** `03_complex_logic.sps`
+* **Migrated To:** `complex_logic.R`

@@ -1003,3 +1003,49 @@ expect_equal(as.numeric(val_1), 10)
 
 }})
 """
+
+
+# ... keep OPTIMIZER_PROMPT_V2 and QA_PROMPT as they are ...
+
+# --- DOC GENERATOR PROMPTS ---
+DOC_SUMMARY_PROMPT = """
+You are a Technical Writer documenting legacy SPSS code.
+Summarize the following code in plain English.
+Focus on:
+1. The Objective (What business question does it answer?)
+2. Key Steps (Data loading, specific transformations, filtering)
+3. The Outcome (What is the final dataset?)
+
+CODE:
+{code}
+
+OUTPUT:
+Return ONLY the summary text.
+"""
+
+DOC_FLOW_PROMPT = """
+You are a Systems Architect.
+Create a Mermaid.js flowchart describing the logic of this SPSS code.
+
+### FORMAT:
+Return a pipe-separated list of nodes.
+Format: `NodeID | Label | Type | TargetNodeID`
+
+* **NodeID:** Short unique ID (e.g., LoadData, CheckCond).
+* **Label:** descriptive text (e.g., "Load Patient Data").
+* **Type:** `Data`, `Logic`, `Script`, or `End`.
+* **TargetNodeID:** The ID of the node this connects TO. (Leave empty for the final End node).
+
+### EXAMPLE:
+Start      | Start Process        | Data  | CheckAge
+CheckAge   | Age > 18?            | Logic | BranchAdult, BranchChild
+BranchAdult| Set Category 'Adult' | Logic | Save
+BranchChild| Set Category 'Child' | Logic | Save
+Save       | Save to CSV          | End   | 
+
+### CODE:
+{code}
+
+### OUTPUT:
+Return ONLY the table rows. No markdown headers.
+"""

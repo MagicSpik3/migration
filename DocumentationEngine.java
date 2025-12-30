@@ -1,11 +1,11 @@
 import sys
 import os
 import textwrap
-import json
 
 # Ensure project root is in path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
+import json
 from src.utils.ollama_client import get_ollama_response
 from src.utils.mermaid import MermaidBuilder
 from src.specs.prompts import DOC_SUMMARY_PROMPT, DOC_FLOW_PROMPT
@@ -33,29 +33,22 @@ class DocumentationEngine:
         
         mb = MermaidBuilder(title)
         
+        # FIX: Handle Timeout/Null response safely
         if not response:
             print(f"      ⚠️ Diagram generation timed out for {title}")
             mb.add_node("Error", "LLM Generation Timed Out", shape="rect")
             return mb.generate_script()
 
         lines = response.strip().split('\n')
-        
-        # Track connections to build later
-        edges = [] 
+        node_ids = []
         
         for line in lines:
             if "|" not in line: continue
             parts = [p.strip() for p in line.split("|")]
-            
-            # We expect at least 3 parts (ID, Label, Type). 4th is Target.
             if len(parts) < 3: continue
             
-            nid = parts[0]
-            label = parts[1]
-            ntype = parts[2].lower()
-            targets = parts[3] if len(parts) > 3 else ""
+            nid, label, ntype = parts[0], parts[1], parts[2].lower()
             
-            # Styling
             shape = "rect"
             style = "script"
             
@@ -66,21 +59,14 @@ class DocumentationEngine:
                 shape = "round"
                 style = "script"
             elif "logic" in ntype:
-                shape = "rhombus" if "?" in label or "Check" in nid else "rect"
+                shape = "rect"
                 style = "logic"
                 
             clean_id = mb.add_node(nid, label, shape=shape, style_class=style)
+            node_ids.append(clean_id)
             
-            # Process Targets (Split by comma for branching)
-            if targets.strip():
-                for target in targets.split(','):
-                    clean_target = mb.sanitize_id(target.strip())
-                    if clean_target:
-                        edges.append((clean_id, clean_target))
-            
-        # Add all defined edges
-        for start, end in edges:
-            mb.add_edge(start, end)
+        for i in range(len(node_ids) - 1):
+            mb.add_edge(node_ids[i], node_ids[i+1])
             
         return mb.generate_script()
 
@@ -98,21 +84,33 @@ class DocumentationEngine:
             
         for entry in manifest:
             func_name = entry.get('r_function_name', 'unnamed_function')
-            spss_file = (entry.get('legacy_file') or entry.get('original_spss') or entry.get('spss_file'))
             
-            if not spss_file: continue
-            if not os.path.isabs(spss_file): spss_file = os.path.join(self.repo_root, spss_file)
-            if not os.path.exists(spss_file): continue
+            spss_file = (entry.get('legacy_file') or 
+                         entry.get('original_spss') or 
+                         entry.get('spss_file') or 
+                         entry.get('source_path'))
+            
+            if not spss_file:
+                print(f"   ⚠️ Skipping {func_name} (Missing 'legacy_file' key in manifest)")
+                continue
+
+            if not os.path.isabs(spss_file):
+                spss_file = os.path.join(self.repo_root, spss_file)
+
+            if not os.path.exists(spss_file):
+                print(f"   ⚠️ Skipping {func_name} (File not found on disk: {spss_file})")
+                continue
                 
             print(f"\n   📝 Documenting {func_name}...")
             
             try:
-                with open(spss_file, 'r') as f: spss_code = f.read()
+                with open(spss_file, 'r') as f:
+                    spss_code = f.read()
                 
                 summary_text = self.generate_text(spss_code)
                 mermaid_code = self.generate_diagram(spss_code, func_name)
                 
-                md_template = textwrap.dedent("""\
+                md_content = textwrap.dedent(f"""\
                     # Documentation: {func_name}
 
                     ## 1. Executive Summary
@@ -124,20 +122,13 @@ class DocumentationEngine:
                     ```
 
                     ## 3. Original Source
-                    * **File:** `{spss_file_name}`
-                    * **Migrated To:** `{r_file_name}`
+                    * **File:** `{os.path.basename(spss_file)}`
+                    * **Migrated To:** `{os.path.basename(entry.get('r_file', 'unknown.R'))}`
                     """)
                 
-                content = md_template.format(
-                    func_name=func_name,
-                    summary_text=summary_text,
-                    mermaid_code=mermaid_code,
-                    spss_file_name=os.path.basename(spss_file),
-                    r_file_name=os.path.basename(entry.get('r_file', 'unknown.R'))
-                )
-                
-                with open(os.path.join(self.docs_dir, f"{func_name}.md"), 'w') as f:
-                    f.write(content)
+                out_path = os.path.join(self.docs_dir, f"{func_name}.md")
+                with open(out_path, 'w') as f:
+                    f.write(md_content)
                     
                 print(f"      ✅ Saved to docs/{func_name}.md")
                 
