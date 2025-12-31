@@ -1,28 +1,7 @@
 import os
 import json
 from src.utils.ollama_client import get_ollama_response
-
-VALIDATOR_PROMPT = """
-You are a Lead R Code Reviewer. 
-Compare the Legacy SPSS code to the Draft R code.
-
-### LEGACY SPSS:
-```spss
-{spss_code}
-```
-### DRAFT R:
-```r
-{r_code}
-```
-### CHECKLIST:
-1. **Pipeline Continuity:** Does the R function end with `return(df)` (or equivalent)? If it returns a summary or `NULL`, this is a CRITICAL FAILURE.
-2. **Column Safety:** Does the R code mistakenly use `transmute` (dropping columns) instead of `mutate`?
-3. **Logic Match:** Does the R code implement the core logic of the SPSS?
-
-### TASK:
-* If the code is VALID, respond with exactly: "PASS"
-* If INVALID, respond with: "FAIL: [Reason]"
-"""
+from src.specs.prompts import VALIDATOR_PROMPT
 
 class CodeValidator:
     def __init__(self, manifest_path="migration_manifest.json"):

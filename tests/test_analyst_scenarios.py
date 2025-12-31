@@ -6,28 +6,21 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.utils.ollama_client import get_ollama_response
+from src.specs.prompts import ANALYST_PROMPT_TEMPLATE
 
-# We need the Analyst Prompt. 
-# Since it might be buried in src/specs/analyst.py, let's define a helper to simulate it
-# or import it if you extracted it to prompts.py (which we should do eventually).
-# For now, we'll simulate the Analyst's core task.
-
-ANALYST_PROMPT_TEMPLATE = """
-You are a Systems Analyst. 
-Analyze this SPSS syntax and write a clear, step-by-step requirement specification in Markdown.
-
-### SPSS CODE:
-{spss_code}
-
-### OUTPUT:
-Markdown specification.
-"""
 
 class TestAnalystScenarios(unittest.TestCase):
 
     def analyze_spss(self, spss_snippet):
         """Helper: Simulates the Analyst converting SPSS to a Spec."""
-        prompt = ANALYST_PROMPT_TEMPLATE.format(spss_code=spss_snippet)
+        
+        prompt = ANALYST_PROMPT_TEMPLATE.format(
+            filename="scenario_test_dummy.sps", 
+            spss_code=spss_snippet
+        )
+
+
+
         
         # Use our deterministic client (Temperature 0.0)
         return get_ollama_response(prompt).lower()

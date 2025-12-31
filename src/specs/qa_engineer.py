@@ -3,7 +3,7 @@ import json
 import subprocess
 from src.utils.refining_agent import RefiningAgent
 from src.utils.ollama_client import get_ollama_response
-from src.specs.prompts import QA_PROMPT
+from src.specs.prompts import QA_FIX_PROMPT, QA_PROMPT
 
 class QAEngineer:
     def __init__(self, project_root="."):
@@ -80,23 +80,8 @@ source("{os.path.abspath(source_file)}")
         with open(test_path, 'r') as f:
             current_test = f.read()
 
-        fix_prompt = f"""
-        The following R test failed. Fix the test logic based on the error.
+        fix_prompt = QA_FIX_PROMPT.format(current_test=current_test, error_log=error_log)
         
-        ### BROKEN TEST:
-        ```r
-        {current_test}
-        ```
-        
-        ### ERROR LOG:
-        {error_log}
-        
-        ### INSTRUCTIONS:
-        1. Return the FULL corrected R file content (including library imports).
-        2. Do NOT change the source() path.
-        3. **CRITICAL:** If the row count assertions failed (e.g. 1 != 2), update your expected value to match the ACTUAL behavior (e.g. change 2 to 1). Do NOT blindly keep the old expectation.
-        4. If type mismatch (numeric vs difftime), use `as.numeric()` in your expectation.
-        """
         
         new_code = get_ollama_response(fix_prompt)
         

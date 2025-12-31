@@ -1,37 +1,7 @@
 import os
 import json
 from src.utils.ollama_client import get_ollama_response
-
-REFACTOR_PROMPT = """
-You are a Senior R Code Reviewer.
-Your goal is to enforce "Idiomatic Tidyverse" style and fix logical bugs.
-
-### CHECKLIST FOR REFACTORING:
-
-1.  **DESTROY Manual String Parsing (The "Substr" Rule):**
-    * ❌ BAD: `ymd(paste0(substr(col, 1, 4), "-", ...))`
-    * ❌ BAD: `as.Date(paste(dor_y, dor_m, dor_d))`
-    * ✅ GOOD: `ymd(col)`
-    * **Reasoning:** `lubridate` parses YYYYMMDD strings natively. Delete the complexity.
-
-2.  **FIX Logic Inversion (The "Time Arrow" Rule):**
-    * ❌ BAD: `date_death - date_reg` (Calculates negative days).
-    * ✅ GOOD: `date_reg - date_death` (Calculates delay).
-    * **Reasoning:** Registration happens *after* death.
-
-3.  **FIX Date Types:**
-    * ❌ BAD: `delay = date_reg - date_death` (Returns 'difftime').
-    * ✅ GOOD: `delay = as.numeric(date_reg - date_death)` (Returns 'numeric').
-
-4.  **CLEANUP:**
-    * Remove `library()` calls.
-    * Keep function name: `{func_name}`.
-
-### INPUT CODE:
-```r
-{r_code}
-OUTPUT:
-Return ONLY the cleaned R code. """
+from src.specs.prompts import REFACTOR_PROMPT
 
 
 def run_refactorer(manifest_path="migration_manifest.json"): 

@@ -1,87 +1,70 @@
 import os
 import re
 import json
+from src.specs.prompts import ANALYST_PROMPT
 from src.utils.ollama_client import get_ollama_response
 
-# --- 1. THE AGGRESSIVE PROMPT ---
-ANALYST_PROMPT = """
-You are a Technical Business Analyst.
-Your goal is to extract the **Business Intent**, NOT the Implementation Detail.
-
-### CRITICAL INSTRUCTION: ABSTRACT THE LOGIC
-- **Dates:** If SPSS uses math (e.g. `/ 10000`) or substrings (`substr`) to parse dates, DO NOT document the math. Just write: **"Parse variable X as Date (Format: YYYYMMDD)."**
-- **Logic:** Focus on the *outcome* (e.g., "Calculate duration in days"), not the steps (e.g., "Subtract seconds, divide by 86400").
-
-### INSTRUCTIONS:
-1. **Text Specification:** Define Data Dictionary and High-Level Logic.
-2. **Visual Logic (Mermaid):**
-   - **MANDATORY SYNTAX:** Quote all labels (e.g., `A["Parse Date"]`).
-   - Show the flow of *Intent*, not math.
-
-### SOURCE SPSS CODE:
-{spss_code}
-
-### OUTPUT FORMAT:
-Provide the Markdown Specification including the Mermaid block.
-"""
-
-class SpecAnalyst:
+class SpecAnalyst: # <--- Renamed back from 'Analyst' to match run_migration.py
     def __init__(self, manifest_path="migration_manifest.json"):
-        self.manifest_path = os.path.abspath(manifest_path)
-        # Fallback logic
-        if not os.path.exists(self.manifest_path):
-             self.manifest_path = os.path.expanduser("~/git/dummy_spss_repo/migration_manifest.json")
-        
-        self.repo_root = os.path.dirname(os.path.dirname(self.manifest_path))
+        self.manifest_path = manifest_path
 
-    def repair_mermaid(self, text):
-        """Regex brute-force to ensure Mermaid labels are quoted."""
-        text = re.sub(r'\[\s*(?![\("])([^\]]+?)\s*\]', r'["\1"]', text)
-        text = re.sub(r'(?<!\{)\{\s*(?!["\{])([^\}]+?)\s*\}(?!\})', r'{"\1"}', text)
-        text = re.sub(r'\{\{\s*(?!")([^\}]+?)\s*\}\}', r'{{"\1"}}', text)
-        return text
+    def load_manifest(self):
+        with open(self.manifest_path, 'r') as f:
+            return json.load(f)
+
+    def _extract_file_references(self, sps_content):
+        """
+        Scans SPSS content for GET DATA /FILE='...' commands.
+        """
+        # Finds /FILE='name.csv' or /FILE="name.csv" (Case insensitive)
+        pattern = r"(?i)/FILE\s*=\s*['\"]([^'\"]+)['\"]"
+        matches = re.findall(pattern, sps_content)
+        return sorted(list(set(matches)))
 
     def analyze_file(self, entry):
-        legacy_path = entry['legacy_file']
-        spec_path = entry['spec_file']
-        func_name = entry['r_function_name']
+        print(f"Analyzing {entry['legacy_name']} -> {os.path.basename(entry['spec_file'])}...")
         
-        # Skip if legacy file is missing
-        if not os.path.exists(legacy_path):
-            print(f"⚠️  Skipping {func_name}: Source file not found ({legacy_path})")
+        # 1. Read Legacy Code
+        try:
+            with open(entry['legacy_file'], 'r', errors='replace') as f:
+                code = f.read()
+        except Exception as e:
+            print(f"⚠️  Read Error: {e}")
             return
 
-        print(f"Analyzing {entry['legacy_name']} -> {os.path.basename(spec_path)}...")
+        # 2. Smart Context Injection
+        detected_files = self._extract_file_references(code)
+        files_context = ", ".join(detected_files) if detected_files else "None detected"
         
-        with open(legacy_path, 'r', errors='ignore') as f:
-            code = f.read()
+        # Prepend context to code so LLM sees it
+        enhanced_code_context = f"// [SYSTEM DETECTED INPUT FILES: {files_context}]\n\n{code}"
+
+        # 3. Prepare Prompt
+        try:
+            prompt = ANALYST_PROMPT.format(
+                filename=entry['legacy_name'], 
+                spss_code=enhanced_code_context
+            )
+        except KeyError as e:
+            print(f"❌ Prompt Format Error: {e}")
+            prompt = f"Analyze this SPSS code: {code}"
+
+        # 4. Call LLM
+        spec_content = get_ollama_response(prompt)
+
+        # 5. Save Spec
+        os.makedirs(os.path.dirname(entry['spec_file']), exist_ok=True)
+        with open(entry['spec_file'], 'w') as f:
+            f.write(spec_content)
             
-        prompt = ANALYST_PROMPT.format(spss_code=code)
-        raw_response = get_ollama_response(prompt)
-        
-        # Apply the safety net
-        clean_response = self.repair_mermaid(raw_response)
-        
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(spec_path), exist_ok=True)
-        
-        with open(spec_path, 'w') as f:
-            f.write(clean_response)
-            
-        print(f"   ✅ Spec saved to {spec_path}")
+        print(f"   ✅ Spec saved to {entry['spec_file']}")
 
     def run(self):
-        if not os.path.exists(self.manifest_path):
-            print(f"❌ Manifest not found at {self.manifest_path}. Run manifest_manager first.")
-            return
-
-        with open(self.manifest_path, 'r') as f:
-            manifest = json.load(f)
-
-        print(f"--- Running Analyst on {len(manifest)} files from Manifest ---")
-        for entry in manifest:
+        print(f"--- Running Analyst on files from Manifest ---")
+        manifest = self.load_manifest()
+        
+        logic_files = [e for e in manifest if e.get('role') == 'logic']
+        
+        print(f"--- Running Analyst on {len(logic_files)} files from Manifest ---")
+        for entry in logic_files:
             self.analyze_file(entry)
-
-if __name__ == "__main__":
-    analyst = SpecAnalyst()
-    analyst.run()

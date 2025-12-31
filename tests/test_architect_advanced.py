@@ -6,30 +6,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the direct client
 from src.utils.ollama_client import get_ollama_response
+from src.specs.prompts import TEST_GENERATE_CODE_PROMPT
 
 class TestArchitectAdvanced(unittest.TestCase):
     
     def generate_code(self, spec, schema):
         # Helper to simulate architect run
-        prompt = """
-        You are a Senior R Developer building an R Package.
-        Translate the specification into a production-ready R function.
-        
-        RULES:
-        1. Use `dplyr`, `tidyr`, `stringr`, `lubridate`.
-        2. Input `df`, Output `return(df)`.
-        3. Use explicit namespacing (e.g. `dplyr::mutate`).
-        4. PREFER `dplyr::case_when` over `ifelse` for conditional logic.
-        
-        DATA SCHEMA:
-        {schema}
-        
-        SPECIFICATION:
-        {spec}
-        
-        OUTPUT: Only the R code. No markdown.
-        """.format(schema=schema, spec=spec)
-        
+        # FIX: Map the test inputs to the new required PROMPT fields
+        prompt = TEST_GENERATE_CODE_PROMPT.format(
+            target_name="advanced_test_func", # Dummy function name
+            columns=schema,                   # Map 'schema' -> 'columns'
+            glossary="No specific glossary terms.", # Dummy glossary
+            spec_content=spec                 # Map 'spec' -> 'spec_content'
+        )
+
+
+
         response = get_ollama_response(prompt)
         return response
 

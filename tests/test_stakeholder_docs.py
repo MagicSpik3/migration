@@ -4,6 +4,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.specs.prompts import EXTRACT_GRAPH_COMPONENTS_PROMPT, STAKEHOLDER_DOCS_PROMPT
 from src.utils.ollama_client import get_ollama_response
 from src.utils.mermaid import MermaidBuilder
 
@@ -41,15 +42,9 @@ class TestStakeholderDocs(unittest.TestCase):
           /Sales_Mean = MEAN(Sales).
         """
         
-        prompt = f"""
-        You are a Technical Writer. 
-        Explain this SPSS logic to a non-technical stakeholder in one sentence.
-        Do NOT use words like 'AGGREGATE', 'OUTFILE', 'SYNTAX'.
-        
-        Code:
-        {spss_code}
-        """
-        
+        prompt = STAKEHOLDER_DOCS_PROMPT.format(code=spss_code)
+
+
         explanation = get_ollama_response(prompt).strip()
         print(f"   [Explanation]: {explanation}")
         
@@ -76,15 +71,9 @@ class TestStakeholderDocs(unittest.TestCase):
         """
         
         # 1. Ask LLM to extract graph components (Structured Data Extraction)
-        prompt = f"""
-        Extract the flow steps from this text.
-        Format as: "StepName | Label | Type"
-        Type can be: Data, Logic, End.
-        
-        Text:
-        {spec}
-        """
-        
+        prompt = EXTRACT_GRAPH_COMPONENTS_PROMPT.format(code=spec)
+
+                
         response = get_ollama_response(prompt)
         print(f"   [LLM Extraction]:\n{response}")
         

@@ -1,25 +1,7 @@
 import pandas as pd
 from src.utils.ollama_client import get_ollama_response
 from src.utils.function_scanner import RFunctionScanner
-
-ROSETTA_PROMPT = """
-You are an expert in R and SPSS translation.
-I will give you an R function. Your task is to provide the BEST, most robust SPSS Syntax equivalent.
-
-Rules:
-1. If it's a data manipulation verb (e.g. `filter`), provide the command (e.g. `SELECT IF`).
-2. If it's a transformation (e.g. `ymd`), provide the formula (e.g. `NUMBER(var, YMD8)`).
-3. Be specific about types (String vs Numeric).
-
-R Function: {r_func}
-
-Return ONLY a JSON object:
-{{
-    "r_function": "{r_func}",
-    "spss_equivalent": "The SPSS command or function",
-    "notes": "Any caveats (e.g. 'Requires numeric input')"
-}}
-"""
+from src.specs.prompts import ROSETTA_PROMPT
 
 def build_rosetta_stone(r_file_path):
     scanner = RFunctionScanner()

@@ -7,7 +7,7 @@ from src.specs.optimizer import CodeOptimizer
 from src.specs.qa_engineer import QAEngineer
 from src.specs.doc_generator import DocumentationEngine
 from src.utils.manifest_manager import ManifestManager
-from src.utils.package_manager import PackageManager
+from src.specs.package_manager import PackageManager
 
 class MigrationOrchestrator:
     def __init__(self, project_root="."):
